@@ -51,10 +51,20 @@ int main() {
       }
     }
 
+    if (cycle % 15 == 1) {
+      for (int i = 0; i < grid.size(); ++i) {
+        for (int j = 0; j < grid[i].size(); ++j) {
+          grid[i][j] = !grid[i][j];
+        }
+      }
+    }
+
     auto render_start = std::chrono::high_resolution_clock::now();
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderFillRect(renderer, nullptr);
 
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     for (int i = 0; i < grid.size(); ++i) {
       for (int j = 0; j < grid[i].size(); ++j) {
         if (grid[i][j]) {
