@@ -1,21 +1,26 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
+#include <SDL3/SDL_video.h>
 #include <array>
 #include <cassert>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 
-const int grid_x = 100;
-const int grid_y = 100;
-const int pix_w = 5;
-const int pix_h = 5;
+const int dpi_scale = 2.0;
+const int window_w = 800 * dpi_scale;
+const int window_h = 800 * dpi_scale;
+
+const int grid_x = 200 * dpi_scale;
+const int grid_y = 200 * dpi_scale;
+const int pix_w = 5 * dpi_scale;
+const int pix_h = 5 * dpi_scale;
 
 const int frame_ms = 1000 / 60;
 
-const int n = 20;                          // rows
-const int m = 40;                           // columns
+const int n = 48;                          // rows
+const int m = 80;                          // columns
 const float spacing = 10.0f;               // grid spacing
 const float timestep = frame_ms / 1000.0f; // seconds
 
@@ -43,9 +48,9 @@ void clamp(int &value, int low, int hi) {
 }
 
 float vel(int i, int j) {
-  clamp(i, 0, vels.size() - 1);
-  clamp(j, 0, m + i % 2 - 1);
-  return vels[i][j];
+  // clamp(i, 0, vels.size() - 1);
+  // clamp(j, 0, m + i % 2 - 1);
+  // return vels[i][j];
 
   // skip the lower
   if (0 <= i && i < vels.size() && 0 <= j && j < m + i % 2) {
@@ -99,6 +104,11 @@ int main() {
     vels[2 * i + 1][0] = 4;
   }
 
+  // right wall drain
+  for (int i = 32; i < 40; ++i) {
+    vels[2 * i + 1][m] = 4;
+  }
+
   // rules
   // vertical (y, even indices) elements are m + 1 long
   // horizontal (x, odd indices) elements are m long
@@ -106,7 +116,7 @@ int main() {
 
   SDL_Init(SDL_INIT_VIDEO);
 
-  SDL_Window *window = SDL_CreateWindow("ffs", 400, 400, 0);
+  SDL_Window *window = SDL_CreateWindow("ffs", window_w, window_h, 0);
   SDL_Renderer *renderer = SDL_CreateRenderer(window, nullptr);
 
   bool running = true;
@@ -139,7 +149,7 @@ int main() {
     }
 
     // 2. incompressibility (every cell)
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 500; ++i) {
       for (int i = 0; i < n; ++i) {
         for (int j = 0; j < m; ++j) {
           if (states[i][j] == 0) {
@@ -265,7 +275,7 @@ int main() {
 
     for (int i = 0; i < states.size(); ++i) {
       for (int j = 0; j < states[i].size(); ++j) {
-        if (states[i][j]) {
+        /*if (states[i][j]) {
           // vel_at, scale hue under max_vel,
           uint8_t col =
               std::min(255, (int)((10 / 255.0) * std::abs(vels[2 * i + 1][j])));
@@ -273,6 +283,16 @@ int main() {
           SDL_FRect rect{(float)grid_x + pix_w * j, (float)grid_y + pix_h * i,
                          pix_w, pix_h};
           SDL_RenderFillRect(renderer, &rect);
+        }*/
+
+        if (i % 2 == 0 && j % 2 == 0) {
+          SDL_SetRenderDrawColor(renderer, 100, 54, 155, 255);
+          int x = grid_x + pix_w * j;
+          int y = grid_y + pix_h * i;
+          float vx = 0.5 * (vel(2 * i + 1, j) + vel(2 * i + 1, j + 1));
+          float vy = 0.5 * (vel(2 * i, j) + vel(2 * i + 2, j));
+          float scale = 8.0 * dpi_scale;
+          SDL_RenderLine(renderer, x, y, x + vx * scale, y + vy * scale);
         }
       }
     }
@@ -290,6 +310,9 @@ int main() {
                     .count();
     SDL_Delay(std::max(frame_ms - time, 0L));
     ++cycle;
+
+    // printf("display scale: %f\n",
+    //        SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(window)));
   }
   printf("avg render time: %lld μs / frame\n", render_duration / cycle);
 
