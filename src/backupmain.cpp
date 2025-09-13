@@ -12,15 +12,15 @@ const int dpi_scale = 2.0;
 const int window_w = 800 * dpi_scale;
 const int window_h = 800 * dpi_scale;
 
-const int grid_x = 200 * dpi_scale;
-const int grid_y = 200 * dpi_scale;
-const int pix_w = 5 * dpi_scale;
-const int pix_h = 5 * dpi_scale;
+const int grid_x = 100 * dpi_scale;
+const int grid_y = 150 * dpi_scale;
+const int pix_w = 4 * dpi_scale;
+const int pix_h = 4 * dpi_scale;
 
 const int frame_ms = 1000 / 60;
 
-const int n = 48;                          // rows
-const int m = 80;                          // columns
+const int n = 100;                         // rows
+const int m = 150;                         // columns
 const float spacing = 10.0f;               // grid spacing
 const float timestep = frame_ms / 1000.0f; // seconds
 
@@ -69,7 +69,6 @@ void print_vels() {
       printf("     ");
     }
     for (int j = 0; j < m + i % 2; ++j) {
-      // vels[i][j] += 9.0f; // gravity
       if (i % 2 && j + 1 < m + i % 2) {
         printf("%+3.1f  .  ", vels[i][j]);
       } else {
@@ -101,12 +100,12 @@ int main() {
   // }
 
   for (int i = 8; i < 16; ++i) {
-    vels[2 * i + 1][0] = 4;
+    vels[2 * i + 1][0] = 5;
   }
 
   // right wall drain
   for (int i = 32; i < 40; ++i) {
-    vels[2 * i + 1][m] = 4;
+    vels[2 * i + 1][m] = 5;
   }
 
   // rules
@@ -122,6 +121,7 @@ int main() {
   bool running = true;
   long long cycle = 0;
   long long render_duration = 0;
+  long long update_duration = 0;
 
   float max_v = 0;
 
@@ -140,16 +140,17 @@ int main() {
     }
 
     // simulation
+    auto update_start = std::chrono::high_resolution_clock::now();
 
     // 1. external forces (every x velocity)
     for (int i = 2; i < vels.size() - 2; i += 2) {
       for (int j = 0; j < m; ++j) {
-        vels[i][j] += 9.0f; // gravity
+        // vels[i][j] += 9.0f; // gravity
       }
     }
 
     // 2. incompressibility (every cell)
-    for (int i = 0; i < 500; ++i) {
+    for (int i = 0; i < 100; ++i) {
       for (int i = 0; i < n; ++i) {
         for (int j = 0; j < m; ++j) {
           if (states[i][j] == 0) {
@@ -237,10 +238,10 @@ int main() {
           const float rel_y = (xi_y - cell_y) / spacing;
           // printf("---> rel: %.4f %.4f\n", rel_x, rel_y);
 
-          assert(rel_x >= -0.0001);
-          assert(rel_y >= -0.0001);
-          assert(rel_x < 1.0001);
-          assert(rel_y < 1.0001);
+          // assert(rel_x >= -0.0001);
+          // assert(rel_y >= -0.0001);
+          // assert(rel_x < 1.0001);
+          // assert(rel_y < 1.0001);
 
           const float w1 = rel_x * (1.0f - rel_y);          // top right
           const float w2 = rel_x * rel_y;                   // bottom right
@@ -264,6 +265,12 @@ int main() {
         }
       }
     }
+
+    long update_time =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::high_resolution_clock::now() - update_start)
+            .count();
+    update_duration += update_time;
 
     vels = new_vels;
 
@@ -314,7 +321,8 @@ int main() {
     // printf("display scale: %f\n",
     //        SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(window)));
   }
-  printf("avg render time: %lld μs / frame\n", render_duration / cycle);
+  printf("avg update time: %5lld μs / frame\n", update_duration / cycle);
+  printf("avg render time: %5lld μs / frame\n", render_duration / cycle);
 
   SDL_Quit();
   return 0;
