@@ -7,28 +7,78 @@
 #include <cmath>
 #include <cstdio>
 
-const int grid_x = 175;
-const int grid_y = 150;
-const int pix_w = 10;
-const int pix_h = 10;
+const int grid_x = 100;
+const int grid_y = 100;
+const int pix_w = 5;
+const int pix_h = 5;
 
 const int frame_ms = 1000 / 60;
 
-const int n = 10;                          // rows
-const int m = 5;                           // columns
+const int n = 20;                          // rows
+const int m = 40;                           // columns
 const float spacing = 10.0f;               // grid spacing
 const float timestep = frame_ms / 1000.0f; // seconds
 
 const float relaxation =
     1.8f; // from 1 to 2, scales incompressibility calculation
 
+std::array<std::array<int, m>, n> states{};
+std::array<std::array<float, m + 1>, 2 * n + 1> vels{};
+std::array<std::array<int, m>, n> avels{};
+
+int cell_state(int i, int j) {
+  if (0 <= i && i < n && 0 <= j && j < m) {
+    return states[i][j];
+  } else {
+    return 0;
+  };
+};
+
+void clamp(int &value, int low, int hi) {
+  if (value < low) {
+    value = low;
+  } else if (value > hi) {
+    value = hi;
+  }
+}
+
+float vel(int i, int j) {
+  clamp(i, 0, vels.size() - 1);
+  clamp(j, 0, m + i % 2 - 1);
+  return vels[i][j];
+
+  // skip the lower
+  if (0 <= i && i < vels.size() && 0 <= j && j < m + i % 2) {
+    return vels[i][j];
+  } else {
+    // printf("%d %d\n", i, j);
+    return 0.0f;
+  };
+};
+
+void print_vels() {
+  printf("---\n");
+  for (int i = 0; i < vels.size(); i += 1) {
+    printf("|");
+    if (i % 2 == 0) {
+      printf("     ");
+    }
+    for (int j = 0; j < m + i % 2; ++j) {
+      // vels[i][j] += 9.0f; // gravity
+      if (i % 2 && j + 1 < m + i % 2) {
+        printf("%+3.1f  .  ", vels[i][j]);
+      } else {
+        printf("%+3.1f     ", vels[i][j]);
+      }
+    }
+    printf("\n");
+  }
+};
+
 int main() {
   printf("\n -- running flip fluid simulator -- \n\n");
 
-  std::array<std::array<int, m>, n> states{};
-  std::array<std::array<float, m + 1>, 2 * n + 1> vels{};
-  std::array<std::array<int, m>, n> avels{};
-
+  // initial state
   for (auto &row : states) {
     for (auto &entry : row) {
       entry = 1;
@@ -38,6 +88,15 @@ int main() {
     for (auto &entry : row) {
       entry = 0.0f;
     }
+  }
+
+  // // left wall fan
+  // for (int i = 0; i < n; ++i) {
+  //   states[i][0] = 0;
+  // }
+
+  for (int i = 8; i < 16; ++i) {
+    vels[2 * i + 1][0] = 4;
   }
 
   // rules
@@ -53,6 +112,8 @@ int main() {
   bool running = true;
   long long cycle = 0;
   long long render_duration = 0;
+
+  float max_v = 0;
 
   while (running) {
     auto start = std::chrono::high_resolution_clock::now();
@@ -70,20 +131,6 @@ int main() {
 
     // simulation
 
-    auto print_vels = [&vels]() {
-      for (int i = 0; i < vels.size(); i += 1) {
-        printf("|");
-        if (i % 2 == 0) {
-          printf("     ");
-        }
-        for (int j = 0; j < m + i % 2; ++j) {
-          // vels[i][j] += 9.0f; // gravity
-          printf("%+3.1f     ", vels[i][j]);
-        }
-        printf("\n");
-      }
-    };
-
     // 1. external forces (every x velocity)
     for (int i = 2; i < vels.size() - 2; i += 2) {
       for (int j = 0; j < m; ++j) {
@@ -96,7 +143,7 @@ int main() {
       for (int i = 0; i < n; ++i) {
         for (int j = 0; j < m; ++j) {
           if (states[i][j] == 0) {
-            return 0;
+            continue;
           }
 
           float &c = vels[2 * i + 1][j + 1]; // right flow (out)
@@ -104,14 +151,6 @@ int main() {
           float &d = vels[2 * i + 2][j];     // bottom flow (out)
           float &b = vels[2 * i][j];         // top flow (in)
           const float net_outflow = c - a + d - b;
-
-          auto cell_state = [&states](int i, int j) -> int {
-            if (0 <= i && i < n && 0 <= j && j < m) {
-              return states[i][j];
-            } else {
-              return 0;
-            };
-          };
 
           const int sc = cell_state(i, j + 1); // right state
           const int sa = cell_state(i, j - 1); // left state
@@ -132,7 +171,7 @@ int main() {
       }
     }
 
-    print_vels();
+    // print_vels();
 
     auto new_vels = vels;
     // 3. semi-lagrangian advection UNCHECKED
@@ -141,18 +180,12 @@ int main() {
         float vf_x = 0;
         float vf_y = 0;
 
-        auto vel = [&vels](int i, int j) -> float {
-          if (0 <= i && i < vels.size() && 0 <= j && j < m + i % 2) {
-            return vels[i][j];
-          } else {
-            // printf("%d %d\n", i, j);
-            return 0.0f;
-          };
-        };
-
         bool horizontal = i % 2;
 
         if (horizontal) {
+          if (!cell_state(i / 2, j - 1) || !cell_state(i / 2, j)) {
+            continue;
+          }
           vf_x = vels[i][j];
           const float v1 = vel(i - 1, j);     // top right
           const float v2 = vel(i + 1, j);     // bottom right
@@ -160,11 +193,13 @@ int main() {
           const float v4 = vel(i - 1, j - 1); // top left
           vf_y = (v1 + v2 + v3 + v4) / 4.0f;
         } else {
+          if (!cell_state(i / 2 - 1, j) || !cell_state(i / 2, j)) {
+            continue;
+          }
           const float v1 = vel(i - 1, j + 1); // top right
           const float v2 = vel(i + 1, j + 1); // bottom right
           const float v3 = vel(i + 1, j);     // bottom left
           const float v4 = vel(i - 1, j);     // top left
-
           vf_x = (v1 + v2 + v3 + v4) / 4.0f;
           vf_y = vels[i][j];
         }
@@ -172,9 +207,7 @@ int main() {
         const float xf_x = spacing * (j + (horizontal ? 0.0f : 0.5f));
         const float xf_y = spacing * i * 0.5f;
 
-        // work backwards to check what point would've been there
-        // this is an approximation that assumes vi_x * timestep is
-        // approximately vf_x * timestep
+        // work backwards to check what (approximate) point would've been there
         const float xi_x = xf_x - timestep * vf_x;
         const float xi_y = xf_y - timestep * vf_y;
 
@@ -182,16 +215,16 @@ int main() {
         // printf("(%d %d) xf: %.0f %.0f\n", i, j, xf_x, xf_y);
         // printf("(%d %d) xi: %.3f %.3f\n", i, j, xi_x, xi_y);
 
-        // weighted average based on area opposite known velocities
-        auto interpolate_vel = [&vel](int cell_i, int cell_j, float x,
-                                      float y) -> float {
+        // weighted average based on area opposite the known velocities
+        auto interpolate_vel = [](int cell_i, int cell_j, float xi_x,
+                                  float xi_y) -> float {
           const float cell_x = spacing * (cell_j + (cell_i % 2 ? 0.0f : 0.5f));
           const float cell_y = spacing * cell_i * 0.5f;
           // printf("(%d %d) cell: %.0f %.0f\n", cell_i, cell_j, cell_x,
           // cell_y);
 
-          const float rel_x = (x - cell_x) / spacing;
-          const float rel_y = (y - cell_y) / spacing;
+          const float rel_x = (xi_x - cell_x) / spacing;
+          const float rel_y = (xi_y - cell_y) / spacing;
           // printf("---> rel: %.4f %.4f\n", rel_x, rel_y);
 
           assert(rel_x >= -0.0001);
@@ -233,8 +266,9 @@ int main() {
     for (int i = 0; i < states.size(); ++i) {
       for (int j = 0; j < states[i].size(); ++j) {
         if (states[i][j]) {
+          // vel_at, scale hue under max_vel,
           uint8_t col =
-              std::min(255, (int)((10 / 255.0) * std::abs(vels[2 * i][j])));
+              std::min(255, (int)((10 / 255.0) * std::abs(vels[2 * i + 1][j])));
           SDL_SetRenderDrawColor(renderer, 100, col, 155, 255);
           SDL_FRect rect{(float)grid_x + pix_w * j, (float)grid_y + pix_h * i,
                          pix_w, pix_h};
