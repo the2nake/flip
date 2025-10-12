@@ -1,6 +1,5 @@
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_hints.h>
-#include <SDL3/SDL_oldnames.h>
 #include <SDL3/SDL_pixels.h>
 #include <SDL3/SDL_render.h>
 #include <SDL3/SDL_surface.h>
@@ -13,17 +12,15 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
-#define SIM_W 40
-#define SIM_H 40
-#define CELL_W 10
+#define SIM_W 288
+#define SIM_H 102
+#define CELL_W 4
 #define CELL_H CELL_W
-#define DENSITY 2 // square root of particles per cell
-#define PARTICLES_PER_CELL (DENSITY * DENSITY)
-#define PARTICLE_COUNT (PARTICLES_PER_CELL * SIM_W * SIM_H)
+#define PARTICLE_COUNT 10000
 #define BACKTRACK_PRECISION 4
 
-#define WINDOW_H (SIM_H * CELL_H)
-#define WINDOW_W (SIM_W * CELL_W)
+#define WINDOW_W SIM_W *CELL_W
+#define WINDOW_H SIM_H *CELL_H
 
 const float frametime = 1.0 / 60.0;
 const float k_timestep = 1.0 / 60.0;
@@ -35,11 +32,10 @@ float now() { return (float)clock() / CLOCKS_PER_SEC; }
 
 typedef enum { WALL = 0, WATER = 1, AIR = 2 } state_e;
 typedef struct {
-  bool active;
-  float x1; // x position
-  float x2; // y position
-  float v1; // x velocity
-  float v2; // y velocity
+  float x1;
+  float x2;
+  float v1;
+  float v2;
 } particle_s;
 
 typedef struct {
@@ -131,21 +127,9 @@ simulator_s initialise() {
   }
 
   // TODO: distribute particles inside water cells
-  const float x_gap = (float)CELL_W / DENSITY;
-  const float y_gap = (float)CELL_H /DENSITY;
-  const float left_padding = x_gap / 2.f;
-  const float top_padding = y_gap / 2.f;
-  for (int i = 0; i < SIM_W * SIM_H; ++i) {
-    const int c_i = i / SIM_W;
-    const int c_j = i % SIM_W;
-    for (int j = 0; j < PARTICLES_PER_CELL; ++j) {
-      sim.particles[PARTICLES_PER_CELL * i + j] = (particle_s){
-          .active = sim.s[c_i][c_j] == WATER,
-          .x1 = c_i * CELL_W + left_padding + x_gap * (j % DENSITY),
-          .x2 = c_j * CELL_H + top_padding + y_gap * (int)(j / DENSITY),
-          .v1 = 0.f,
-          .v2 = 0.f};
-    }
+  particle_s default_particle = {.x1 = 0, .x2 = 0, .v1 = 0, .v2 = 0};
+  for (int i = 0; i < PARTICLE_COUNT; ++i) {
+    sim.particles[i] = default_particle;
   }
 
   return sim;
@@ -166,12 +150,11 @@ void move_particles(simulator_s *sim) {
     for (int tries = 0; tries < 10 && in_wall(sim, sim->particles[i]);
          ++tries) {
       sim->particles[i].x1 -= dx1 / BACKTRACK_PRECISION;
-      sim->particles[i].x2 -= dx2 / BACKTRACK_PRECISION;
+      sim->particles[i].x2 -= dx1 / BACKTRACK_PRECISION;
     }
   }
 }
 
-// TODO: grid velocities from particles
 void velocity_to_grid(simulator_s *sim) {
   float weight_sum;
   for (int i = 0; i < sim->x1n; ++i) {
@@ -226,7 +209,7 @@ void incompress(simulator_s *sim, int iters) {
 void distribute_to_particles(simulator_s *sim) {}
 
 void render_simulation(SDL_Renderer *renderer, simulator_s *sim) {
-  // draw cells
+
   const SDL_Color c_wall = {155, 155, 155};
   const SDL_Color c_fluid = {200, 220, 255};
   const SDL_Color c_air = {255, 255, 255};
@@ -251,14 +234,6 @@ void render_simulation(SDL_Renderer *renderer, simulator_s *sim) {
       }
       SDL_RenderFillRect(renderer, &rect);
     }
-  }
-  // draw particles
-  SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-  for (int i = 0; i < PARTICLE_COUNT; ++i) {
-    particle_s p = sim->particles[i];
-    if (!p.active)
-      continue;
-    SDL_RenderPoint(renderer, p.x1, p.x2);
   }
 }
 
@@ -307,9 +282,9 @@ int main() {
     // simulation code
 
     move_particles(&sim);
-    // velocity_to_grid(&sim);
+    velocity_to_grid(&sim);
     incompress(&sim, k_iters);
-    // distribute_to_particles(&sim);
+    distribute_to_particles(&sim);
 
     float update1 = now();
     update_time += update1 - t0;

@@ -145,7 +145,7 @@ int main() {
     // 1. external forces (every x velocity)
     for (int i = 2; i < vels.size() - 2; i += 2) {
       for (int j = 0; j < m; ++j) {
-        // vels[i][j] += 9.0f; // gravity
+        vels[i][j] += 9.81f * timestep; // gravity
       }
     }
 
