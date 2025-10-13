@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 #include <SDL3/SDL.h>
@@ -20,17 +21,23 @@ more efficient data type for copy away from grid velocities
 using restrict keyword on pointers?
 */
 
-#define SIM_W 40
-#define SIM_H 40
-#define CELL_W 10
-#define CELL_H CELL_W
-#define DENSITY 2 // square root of particles per cell
-#define PARTICLES_PER_CELL (DENSITY * DENSITY)
-#define PARTICLE_COUNT (PARTICLES_PER_CELL * SIM_W * SIM_H)
-#define BACKTRACK_PRECISION 4
+constexpr int SIM_W = 40;
+constexpr int SIM_H = 40;
 
-#define WINDOW_H (SIM_H * CELL_H)
-#define WINDOW_W (SIM_W * CELL_W)
+constexpr int CELL_W = 10;
+constexpr int CELL_H = CELL_W;
+
+constexpr int DENSITY = 2;
+constexpr int PARTICLES_PER_CELL = DENSITY * DENSITY;
+constexpr int PARTICLE_COUNT = PARTICLES_PER_CELL * SIM_W * SIM_H;
+
+constexpr int BACKTRACK_PRECISION = 4;
+
+constexpr int WINDOW_W = SIM_W * CELL_W;
+constexpr int WINDOW_H = SIM_H * CELL_H;
+
+constexpr int V1N = (SIM_W + 1) * SIM_H;
+constexpr int V2N = SIM_W * (SIM_H + 1);
 
 const float k_frametime = 1.0 / 60.0;
 const float k_timestep = 1.0 / 60.0;
@@ -45,6 +52,7 @@ typedef enum {
   state_water_e = 1,
   state_air_e = 2
 } state_e_t;
+
 typedef struct {
   state_e_t type; // use `state_solid_e` for disabled
   float x1;       // x position
@@ -53,37 +61,57 @@ typedef struct {
   float v2;       // y velocity
 } particle_s;
 
-typedef struct {
-  state_e_t s[SIM_H][SIM_W];     // state
-  float v1[(SIM_W + 1) * SIM_H]; // horizontal velocity
-  float v2[SIM_W * (SIM_H + 1)]; // vertical velocity
-  int x1n;
-  int x2n;
+state_e_t s[SIM_H][SIM_W]; // state
+float v1[V1N];             // horizontal velocity
+float v2[V2N];             // vertical velocity
+uint w1[V1N];              // fixed point weights
+uint w2[V2N];              // fixed point weights
 
-  particle_s particles[PARTICLE_COUNT];
-} simulator_s;
+particle_s particles[PARTICLE_COUNT];
 
-float *x_vel(simulator_s *sim, int i) {
-  if (0 <= i && i < sim->x1n) {
-    return &sim->v1[i];
+float *x_vel(int i) {
+  if (0 <= i && i < V1N) {
+    return &v1[i];
   } else {
     return NULL;
   }
 }
 
-float *y_vel(simulator_s *sim, int i) {
-  if (0 <= i && i < sim->x2n) {
-    return &sim->v2[i];
+float *y_vel(int i) {
+  if (0 <= i && i < V2N) {
+    return &v2[i];
   } else {
     return NULL;
   }
 }
 
-bool in_bounds(int i, int j) {
-  return 0 <= i && i < SIM_H && 0 <= j && j < SIM_W;
+float clamp(float value, const float lower, const float higher) {
+  if (value > higher) {
+    return higher;
+  }
+  if (value < lower) {
+    return lower;
+  }
+  return value;
 }
 
-bool on_edge(int i, int j) {
+bool cell_in_bounds(int i, int j) {
+  return 0.f <= i && i < SIM_H && 0.f <= j && j < SIM_W;
+}
+
+bool particle_in_bounds(particle_s *p) {
+  return 0.f <= p->x1 && p->x1 <= SIM_W * CELL_W && 0.f <= p->x2 &&
+         p->x2 <= SIM_H * CELL_H;
+}
+
+void particle_enforce_bounds(particle_s *p) {
+  if (!particle_in_bounds(p)) {
+    p->x1 = clamp(p->x1, 0.f, SIM_W * CELL_W);
+    p->x2 = clamp(p->x2, 0.f, SIM_H * CELL_H);
+  }
+}
+
+bool cell_on_edge(int i, int j) {
   if (i == 0 || i == SIM_H - 1) {
     return true;
   }
@@ -93,52 +121,45 @@ bool on_edge(int i, int j) {
   return false;
 }
 
-// use in_wall for particles
-bool wall_at(simulator_s *sim, int i, int j) {
-  if (in_bounds(i, j)) {
-    return sim->s[i][j] == state_solid_e;
+bool cell_is_solid(int i, int j) {
+  if (cell_in_bounds(i, j)) {
+    return s[i][j] == state_solid_e;
   }
   return false;
 }
 
-// use wall_at for cells
-bool in_wall(simulator_s *sim, particle_s particle) {
+bool particle_in_solid(particle_s particle) {
   int i = particle.x1 / CELL_W;
   int j = particle.x2 / CELL_H;
-  return in_bounds(i, j) &&
-         wall_at(sim, i, j); // check bounds to not lose particles
+  return cell_in_bounds(i, j) &&
+         cell_is_solid(i, j); // check bounds to not lose particles
 }
 
-simulator_s initialise() {
-  simulator_s sim;
-
+void initialise() {
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      // if (j < SIM_W / 2) {
-      sim.s[i][j] = state_water_e;
-      // } else {
-      //   sim.s[i][j] = AIR;
-      // }
-    }
-  }
-
-  for (int i = 0; i < SIM_H; ++i) {
-    for (int j = 0; j < SIM_W; ++j) {
-      if (on_edge(i, j)) {
-        sim.s[i][j] = state_solid_e;
+      if (j < SIM_W / 2) {
+        s[i][j] = state_water_e;
+      } else {
+        s[i][j] = state_air_e;
       }
     }
   }
 
-  sim.x1n = (SIM_W + 1) * SIM_H;
-  sim.x2n = (SIM_H + 1) * SIM_W;
-
-  for (int i = 0; i < sim.x1n; ++i) {
-    sim.v1[i] = 0.f;
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W; ++j) {
+      if (cell_on_edge(i, j)) {
+        s[i][j] = state_solid_e;
+      }
+    }
   }
 
-  for (int i = 0; i < sim.x2n; ++i) {
-    sim.v2[i] = 0.f;
+  for (int i = 0; i < V1N; ++i) {
+    v1[i] = 0.f;
+  }
+
+  for (int i = 0; i < V2N; ++i) {
+    v2[i] = 0.f;
   }
 
   // distribute particles evenly inside cells
@@ -150,66 +171,68 @@ simulator_s initialise() {
     const int c_i = i / SIM_W;
     const int c_j = i % SIM_W;
     for (int j = 0; j < PARTICLES_PER_CELL; ++j) {
-      sim.particles[PARTICLES_PER_CELL * i + j] = (particle_s){
-          .type = sim.s[c_i][c_j],
-          .x1 = c_i * CELL_W + left_padding + x_gap * (j % DENSITY),
-          .x2 = c_j * CELL_H + top_padding + y_gap * (int)(j / DENSITY),
+      particles[PARTICLES_PER_CELL * i + j] = (particle_s){
+          .type = s[c_i][c_j],
+          .x1 = c_j * CELL_H + top_padding + y_gap * (int)(j / DENSITY),
+          .x2 = c_i * CELL_W + left_padding + x_gap * (j % DENSITY),
           .v1 = 0.f,
           .v2 = 0.f};
     }
   }
-
-  return sim;
 }
 
-void move_particles(simulator_s *sim) {
-  // ? separate particles using LUT method, radix sorting
+void advection() {
+  // TODO? separate particles using LUT method, radix sorting
 
   for (int i = 0; i < PARTICLE_COUNT; ++i) {
-    sim->particles[i].v2 += k_gravity * k_timestep;
-    float dx1 = sim->particles[i].v1 * k_timestep;
-    float dx2 = sim->particles[i].v2 * k_timestep;
+    particles[i].v2 += k_gravity * k_timestep;
+    float dx1 = particles[i].v1 * k_timestep;
+    float dx2 = particles[i].v2 * k_timestep;
 
-    sim->particles[i].x1 += dx1;
-    sim->particles[i].x2 += dx2;
+    particles[i].x1 += dx1;
+    particles[i].x2 += dx2;
 
-    // TODO: particles bounce off of walls with raycasting
-    for (int tries = 0; tries < 10 && in_wall(sim, sim->particles[i]);
+    particle_enforce_bounds(&particles[i]);
+
+    // TODO? particles bounce off of walls with raycasting
+    for (int tries = 0; tries < 10 && particle_in_solid(particles[i]);
          ++tries) {
-      sim->particles[i].x1 -= dx1 / BACKTRACK_PRECISION;
-      sim->particles[i].x2 -= dx2 / BACKTRACK_PRECISION;
+      particles[i].x1 -= dx1 / BACKTRACK_PRECISION;
+      particles[i].x2 -= dx2 / BACKTRACK_PRECISION;
     }
   }
 }
 
 // TODO: grid velocities from particles
-void velocity_to_grid(simulator_s *sim) {
-  float weight_sum;
-  for (int i = 0; i < sim->x1n; ++i) {
-  }
+void velocity_to_grid() {
+  particle_s *p = particles;
   for (int i = 0; i < PARTICLE_COUNT; ++i) {
-    particle_s *p = sim->particles;
-    int c_x1 = p[i].x1 / CELL_W;
-    int c_x2 = p[i].x2 / CELL_H;
+    if (p[i].type != state_water_e)
+      continue;
 
-    float l_x1 = p[i].x1 - c_x1;
-    float l_x2 = p[i].x2 - c_x2;
+    // x velocities: no change on x, staggered upwards by CELL_H / 2
+    int v1_i =
+        (int)(p[i].x1) / CELL_W +
+        (int)(p[i].x2 / CELL_H - 0.5) * (SIM_W + 1); // index of top-left corner
+    // y velocities: no change on y, staggered left by CELL_W / 2
   }
+
+  // average weights and quantities
 }
 
-void incompress(simulator_s *sim, int iters) {
+void projection(int iters) {
   // TODO: compensate for high density areas
   for (int n = 0; n < iters; ++n) {
     for (int i = 1; i < SIM_H - 1; ++i) {
       for (int j = 1; j < SIM_W - 1; ++j) {
-        if (wall_at(sim, i, j)) {
+        if (cell_is_solid(i, j)) {
           continue;
         }
 
-        bool sl = sim->s[i][j - 1] != state_solid_e;
-        bool sr = sim->s[i][j + 1] != state_solid_e;
-        bool su = sim->s[i - 1][j] != state_solid_e;
-        bool sd = sim->s[i + 1][j] != state_solid_e;
+        bool sl = s[i][j - 1] == state_water_e;
+        bool sr = s[i][j + 1] == state_water_e;
+        bool su = s[i - 1][j] == state_water_e;
+        bool sd = s[i + 1][j] == state_water_e;
         float s = sl + sr + su + sd;
         if (sl & sr & su & sd == 0) {
           continue;
@@ -218,10 +241,10 @@ void incompress(simulator_s *sim, int iters) {
         const int v1_i = i * (SIM_W + 1) + j; // left
         const int v2_i = i * SIM_W + j;       // top
 
-        float *vl = &sim->v1[v1_i];
-        float *vr = &sim->v1[v1_i + 1];
-        float *vu = &sim->v2[v2_i];
-        float *vd = &sim->v2[v2_i + (SIM_W + 1)];
+        float *vl = &v1[v1_i];
+        float *vr = &v1[v1_i + 1];
+        float *vu = &v2[v2_i];
+        float *vd = &v2[v2_i + (SIM_W + 1)];
 
         float flow = k_relax * (-*vl + *vr + -*vu + *vd);
 
@@ -234,9 +257,9 @@ void incompress(simulator_s *sim, int iters) {
   }
 }
 
-void distribute_to_particles(simulator_s *sim) {}
+void distribute_to_particles() {}
 
-void render_simulation(SDL_Renderer *renderer, simulator_s *sim) {
+void render_simulation(SDL_Renderer *renderer) {
   // draw cells
   const SDL_Color c_wall = {155, 155, 155};
   const SDL_Color c_fluid = {200, 220, 255};
@@ -246,7 +269,7 @@ void render_simulation(SDL_Renderer *renderer, simulator_s *sim) {
     for (int j = 0; j < SIM_W; ++j) {
       SDL_FRect rect = {
           .x = CELL_W * j, .y = CELL_H * i, .w = CELL_W, .h = CELL_H};
-      switch (sim->s[i][j]) {
+      switch (s[i][j]) {
       case state_water_e:
         SDL_SetRenderDrawColor(renderer, c_fluid.r, c_fluid.g, c_fluid.b,
                                SDL_ALPHA_OPAQUE);
@@ -266,7 +289,7 @@ void render_simulation(SDL_Renderer *renderer, simulator_s *sim) {
   // draw particles
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
   for (int i = 0; i < PARTICLE_COUNT; ++i) {
-    particle_s p = sim->particles[i];
+    particle_s p = particles[i];
     if (p.type != state_water_e)
       continue;
     SDL_RenderPoint(renderer, p.x1, p.x2);
@@ -299,7 +322,7 @@ int main() {
   float update_time = 0.0;
   long long cycles = 0;
 
-  simulator_s sim = initialise();
+  initialise();
 
   while (running) {
     float t0 = now();
@@ -317,17 +340,17 @@ int main() {
 
     // simulation code
 
-    move_particles(&sim);
-    // velocity_to_grid(&sim);
-    incompress(&sim, k_iters);
-    // distribute_to_particles(&sim);
+    advection();
+    velocity_to_grid();
+    projection(k_iters);
+    // distribute_to_particles();
 
     float update1 = now();
     update_time += update1 - t0;
 
     // rendering code
 
-    render_simulation(renderer, &sim);
+    render_simulation(renderer);
 
     SDL_RenderPresent(renderer);
 
