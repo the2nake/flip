@@ -8,7 +8,6 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
 
 #include <SDL3/SDL.h>
@@ -21,8 +20,8 @@ more efficient data type for copy away from grid velocities
 using restrict keyword on pointers?
 */
 
-constexpr int SIM_W = 40;
-constexpr int SIM_H = 40;
+constexpr int SIM_W = 20;
+constexpr int SIM_H = 20;
 
 constexpr int CELL_W = 10;
 constexpr int CELL_H = CELL_W;
@@ -61,11 +60,11 @@ typedef struct {
   float v2;       // y velocity
 } particle_s;
 
-state_e_t s[SIM_H][SIM_W]; // state
+state_e_t s[SIM_H][SIM_W]; // states
 float v1[V1N];             // horizontal velocity
 float v2[V2N];             // vertical velocity
-uint w1[V1N];              // fixed point weights
-uint w2[V2N];              // fixed point weights
+float w1[V1N];             // fixed point weights
+float w2[V2N];             // fixed point weights
 
 particle_s particles[PARTICLE_COUNT];
 
@@ -85,12 +84,18 @@ float *y_vel(int i) {
   }
 }
 
-float clamp(float value, const float lower, const float higher) {
-  if (value > higher) {
-    return higher;
+int in_rangei(int value, int lo, int hi) { return lo <= value && value <= hi; }
+
+float in_rangef(float value, float lo, float hi) {
+  return lo <= value && value <= hi;
+}
+
+float clamp(float value, const float lo, const float hi) {
+  if (value > hi) {
+    return hi;
   }
-  if (value < lower) {
-    return lower;
+  if (value < lo) {
+    return lo;
   }
   return value;
 }
@@ -121,24 +126,41 @@ bool cell_on_edge(int i, int j) {
   return false;
 }
 
-bool cell_is_solid(int i, int j) {
+bool cell_is(int i, int j, state_e_t state) {
   if (cell_in_bounds(i, j)) {
-    return s[i][j] == state_solid_e;
+    return s[i][j] == state;
   }
   return false;
 }
 
-bool particle_in_solid(particle_s particle) {
+bool particle_in(particle_s particle, state_e_t state) {
   int i = particle.x1 / CELL_W;
   int j = particle.x2 / CELL_H;
-  return cell_in_bounds(i, j) &&
-         cell_is_solid(i, j); // check bounds to not lose particles
+  return cell_is(i, j, state); // check bounds to not lose particles
+}
+
+float particle_velocity(particle_s *p) {
+  return sqrtf(p->v1 * p->v1 + p->v2 * p->v2);
+}
+
+void reset_velocity_field() {
+  for (int i = 0; i < V1N; ++i) {
+    v1[i] = 0.f;
+    w1[i] = 1.f;
+  }
+
+  for (int i = 0; i < V2N; ++i) {
+    v2[i] = 0.f;
+    w1[i] = 1.f;
+  }
 }
 
 void initialise() {
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      if (j < SIM_W / 2) {
+      if (cell_on_edge(i, j)) {
+        s[i][j] = state_solid_e;
+      } else if (j < SIM_W / 2) {
         s[i][j] = state_water_e;
       } else {
         s[i][j] = state_air_e;
@@ -146,21 +168,7 @@ void initialise() {
     }
   }
 
-  for (int i = 0; i < SIM_H; ++i) {
-    for (int j = 0; j < SIM_W; ++j) {
-      if (cell_on_edge(i, j)) {
-        s[i][j] = state_solid_e;
-      }
-    }
-  }
-
-  for (int i = 0; i < V1N; ++i) {
-    v1[i] = 0.f;
-  }
-
-  for (int i = 0; i < V2N; ++i) {
-    v2[i] = 0.f;
-  }
+  reset_velocity_field();
 
   // distribute particles evenly inside cells
   const float x_gap = (float)CELL_W / DENSITY;
@@ -195,37 +203,132 @@ void advection() {
     particle_enforce_bounds(&particles[i]);
 
     // TODO? particles bounce off of walls with raycasting
-    for (int tries = 0; tries < 10 && particle_in_solid(particles[i]);
+    for (int tries = 0; tries < 10 && particle_in(particles[i], state_solid_e);
          ++tries) {
       particles[i].x1 -= dx1 / BACKTRACK_PRECISION;
       particles[i].x2 -= dx2 / BACKTRACK_PRECISION;
     }
   }
+
+  // TODO! mark cells
 }
 
-// TODO: grid velocities from particles
+void add_v1_weight(int idx, float v, float w) {
+  if (!in_rangei(idx, 0, V1N)) {
+    return;
+  }
+  int i = idx / (SIM_W + 1);
+  int j = idx % (SIM_W + 1);
+
+  if (cell_is(i, j - 1, state_water_e) || cell_is(i, j, state_water_e)) {
+    v1[idx] += w * v;
+    w1[idx] += w;
+  } else {
+    v1[idx] = NAN;
+    w1[idx] = 0;
+  }
+}
+
+void add_v2_weight(int idx, float v, float w) {
+  if (!in_rangei(idx, 0, V2N)) {
+    return;
+  }
+  int i = idx / SIM_W;
+  int j = idx % SIM_W;
+
+  if (cell_is(i - 1, j, state_water_e) || cell_is(i, j, state_water_e)) {
+    v2[idx] += w * v;
+    w2[idx] += w;
+  } else {
+    v2[idx] = NAN;
+    w2[idx] = 0;
+  }
+}
+
 void velocity_to_grid() {
   particle_s *p = particles;
+  reset_velocity_field();
   for (int i = 0; i < PARTICLE_COUNT; ++i) {
     if (p[i].type != state_water_e)
       continue;
 
     // x velocities: no change on x, staggered upwards by CELL_H / 2
-    int v1_i =
-        (int)(p[i].x1) / CELL_W +
-        (int)(p[i].x2 / CELL_H - 0.5) * (SIM_W + 1); // index of top-left corner
+    int v1_j = p[i].x1 / CELL_W;
+    int v1_i = p[i].x2 / CELL_H - 0.5; // index of top-left corner
+    int v1_idx = v1_i * (SIM_W + 1) + v1_j;
+
+    float v1_dx = p[i].x1 - v1_j * CELL_W;
+    float v1_dy = p[i].x2 - (v1_i + 0.5) * CELL_H;
+
+    int v1_itl = v1_idx;
+    int v1_itr = v1_idx + 1;
+    int v1_ibr = v1_idx + (SIM_W + 1) + 1;
+    int v1_ibl = v1_idx + (SIM_W + 1);
+
+    add_v1_weight(v1_itl, p[i].v1, v1_dx * v1_dy);                       // tl
+    add_v1_weight(v1_itr, p[i].v1, (CELL_W - v1_dx) * v1_dy);            // tr
+    add_v1_weight(v1_ibr, p[i].v1, (CELL_W - v1_dx) * (CELL_H - v1_dy)); // br
+    add_v1_weight(v1_ibl, p[i].v1, v1_dx * (CELL_H - v1_dy));            // bl
+
     // y velocities: no change on y, staggered left by CELL_W / 2
+    int v2_j = p[i].x1 / CELL_W - 0.5;
+    int v2_i = p[i].x2 / CELL_H;
+    int v2_idx = v2_i * SIM_W + v2_j;
+
+    float v2_dx = p[i].x1 - (v2_j + 0.5) * CELL_W;
+    float v2_dy = p[i].x2 - v2_i * CELL_H;
+
+    int v2_itl = v2_idx;
+    int v2_itr = v2_idx + 1;
+    int v2_ibr = v2_idx + SIM_W + 1;
+    int v2_ibl = v2_idx + SIM_W;
+
+    add_v2_weight(v2_itl, p[i].v2, v2_dx * v2_dy);                       // tl
+    add_v2_weight(v2_itr, p[i].v2, (CELL_W - v2_dx) * v2_dy);            // tr
+    add_v2_weight(v2_ibr, p[i].v2, (CELL_W - v2_dx) * (CELL_H - v2_dy)); // br
+    add_v2_weight(v2_ibl, p[i].v2, v2_dx * (CELL_H - v2_dy));            // bl
   }
 
-  // average weights and quantities
+  for (int i = 0; i < V1N; ++i) {
+    if (isnan(v1[i]) || w1[i] == 0)
+      continue;
+    v1[i] /= w1[i];
+  }
+  for (int i = 0; i < V2N; ++i) {
+    if (isnan(v2[i]) || w2[i] == 0)
+      continue;
+    v2[i] /= w2[i];
+  }
 }
 
+// void print_v2s() {
+//   for (int i = 0; i < SIM_H + 1; ++i) {
+//     for (int j = 0; j < SIM_H; ++j) {
+//       printf("%4.1f ", v2[SIM_W * i + j]);
+//     }
+//     printf("\n");
+//   }
+//   printf("========================================\n");
+// }
+
+// void print_w2s() {
+//   for (int i = 0; i < SIM_H + 1; ++i) {
+//     for (int j = 0; j < SIM_H; ++j) {
+//       printf("%.1f ", w2[SIM_W * i + j]);
+//     }
+//     printf("\n");
+//   }
+//   printf("========================================\n");
+// }
+
 void projection(int iters) {
+  // TODO! fix for handling nan cells
   // TODO: compensate for high density areas
+  // TODO? do you handle incompressibility including air/water boundaries?
   for (int n = 0; n < iters; ++n) {
     for (int i = 1; i < SIM_H - 1; ++i) {
       for (int j = 1; j < SIM_W - 1; ++j) {
-        if (cell_is_solid(i, j)) {
+        if (cell_is(i, j, state_solid_e)) {
           continue;
         }
 
@@ -342,7 +445,7 @@ int main() {
 
     advection();
     velocity_to_grid();
-    projection(k_iters);
+    // projection(k_iters);
     // distribute_to_particles();
 
     float update1 = now();

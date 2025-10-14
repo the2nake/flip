@@ -6,6 +6,7 @@ project(
 
 find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)
 
+add_link_options("-lm")
 add_executable(ffs src/main.c)
 
 target_link_libraries(ffs PRIVATE SDL3::SDL3)
