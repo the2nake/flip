@@ -32,8 +32,11 @@ constexpr int PARTICLE_COUNT = PARTICLES_PER_CELL * SIM_W * SIM_H;
 
 constexpr int BACKTRACK_PRECISION = 4;
 
+// TODO! convert window_scale to internal difference between graphical and internal scale
+
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;
+constexpr float WINDOW_SCALE = 2.f;
 
 constexpr int V1N = (SIM_W + 1) * SIM_H;
 constexpr int V2N = SIM_W * (SIM_H + 1);
@@ -65,6 +68,28 @@ float v1[V1N];             // horizontal velocity
 float v2[V2N];             // vertical velocity
 float w1[V1N];             // fixed point weights
 float w2[V2N];             // fixed point weights
+
+// * debug functions
+
+void print_v2s() {
+  for (int i = 0; i < SIM_H + 1; ++i) {
+    for (int j = 0; j < SIM_H; ++j) {
+      printf("%4.1f ", v2[SIM_W * i + j]);
+    }
+    printf("\n");
+  }
+  printf("========================================\n");
+}
+
+void print_w2s() {
+  for (int i = 0; i < SIM_H + 1; ++i) {
+    for (int j = 0; j < SIM_H; ++j) {
+      printf("%.1f ", w2[SIM_W * i + j]);
+    }
+    printf("\n");
+  }
+  printf("========================================\n");
+}
 
 particle_s particles[PARTICLE_COUNT];
 
@@ -301,26 +326,6 @@ void velocity_to_grid() {
   }
 }
 
-// void print_v2s() {
-//   for (int i = 0; i < SIM_H + 1; ++i) {
-//     for (int j = 0; j < SIM_H; ++j) {
-//       printf("%4.1f ", v2[SIM_W * i + j]);
-//     }
-//     printf("\n");
-//   }
-//   printf("========================================\n");
-// }
-
-// void print_w2s() {
-//   for (int i = 0; i < SIM_H + 1; ++i) {
-//     for (int j = 0; j < SIM_H; ++j) {
-//       printf("%.1f ", w2[SIM_W * i + j]);
-//     }
-//     printf("\n");
-//   }
-//   printf("========================================\n");
-// }
-
 void projection(int iters) {
   // TODO! fix for handling nan cells
   // TODO: compensate for high density areas
@@ -399,24 +404,32 @@ void render_simulation(SDL_Renderer *renderer) {
   }
 }
 
+void setup_scaling(SDL_Window *w, SDL_Renderer *r) {
+
+  printf("on wayland, try SDL_VIDEODRIVER=wayland\n\n");
+  float content_dpi = SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(w));
+  float window_dpi = SDL_GetWindowDisplayScale(w);
+  float pixel_density = SDL_GetWindowPixelDensity(w);
+
+  printf("content dpi scaling: %.2f\n", content_dpi);
+  printf("window dpi scaling: %.2f\n", window_dpi);
+  printf("window pixel density: %.2f\n\n", pixel_density);
+
+  float scale = pixel_density * WINDOW_SCALE;
+  SDL_SetRenderScale(r, scale, scale);
+}
+
 int main() {
   printf("\n");
 
   SDL_Init(SDL_INIT_VIDEO);
 
-  SDL_Window *window = SDL_CreateWindow("ffs", WINDOW_W, WINDOW_H,
-                                        SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  SDL_Window *window =
+      SDL_CreateWindow("ffs", WINDOW_W * WINDOW_SCALE, WINDOW_H * WINDOW_SCALE,
+                       SDL_WINDOW_HIGH_PIXEL_DENSITY);
   SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
 
-  printf("on wayland, try SDL_VIDEODRIVER=wayland\n\n");
-
-  printf("content dpi scaling: %.2f\n",
-         SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(window)));
-  printf("window dpi scaling: %.2f\n", SDL_GetWindowDisplayScale(window));
-  printf("window pixel density: %.2f\n\n", SDL_GetWindowPixelDensity(window));
-
-  float dpi = SDL_GetWindowPixelDensity(window);
-  SDL_SetRenderScale(renderer, dpi, dpi);
+  setup_scaling(window, renderer);
 
   printf(" -- running flip fluid simulator -- \n\n");
 
