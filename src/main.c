@@ -32,7 +32,8 @@ constexpr int PARTICLE_COUNT = PARTICLES_PER_CELL * SIM_W * SIM_H;
 
 constexpr int BACKTRACK_PRECISION = 4;
 
-// TODO! convert window_scale to internal difference between graphical and internal scale
+// TODO! convert window_scale to internal difference between graphical and
+// internal scale
 
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;
@@ -61,7 +62,7 @@ typedef struct {
   float x2;       // y position
   float v1;       // x velocity
   float v2;       // y velocity
-} particle_s;
+} particle_t;
 
 state_e_t s[SIM_H][SIM_W]; // states
 float v1[V1N];             // horizontal velocity
@@ -91,7 +92,7 @@ void print_w2s() {
   printf("========================================\n");
 }
 
-particle_s particles[PARTICLE_COUNT];
+particle_t particles[PARTICLE_COUNT];
 
 float *x_vel(int i) {
   if (0 <= i && i < V1N) {
@@ -129,12 +130,12 @@ bool cell_in_bounds(int i, int j) {
   return 0.f <= i && i < SIM_H && 0.f <= j && j < SIM_W;
 }
 
-bool particle_in_bounds(particle_s *p) {
+bool particle_in_bounds(particle_t *p) {
   return 0.f <= p->x1 && p->x1 <= SIM_W * CELL_W && 0.f <= p->x2 &&
          p->x2 <= SIM_H * CELL_H;
 }
 
-void particle_enforce_bounds(particle_s *p) {
+void particle_enforce_bounds(particle_t *p) {
   if (!particle_in_bounds(p)) {
     p->x1 = clamp(p->x1, 0.f, SIM_W * CELL_W);
     p->x2 = clamp(p->x2, 0.f, SIM_H * CELL_H);
@@ -158,13 +159,13 @@ bool cell_is(int i, int j, state_e_t state) {
   return false;
 }
 
-bool particle_in(particle_s particle, state_e_t state) {
+bool particle_in(particle_t particle, state_e_t state) {
   int i = particle.x1 / CELL_W;
   int j = particle.x2 / CELL_H;
   return cell_is(i, j, state); // check bounds to not lose particles
 }
 
-float particle_velocity(particle_s *p) {
+float particle_velocity(particle_t *p) {
   return sqrtf(p->v1 * p->v1 + p->v2 * p->v2);
 }
 
@@ -204,7 +205,7 @@ void initialise() {
     const int c_i = i / SIM_W;
     const int c_j = i % SIM_W;
     for (int j = 0; j < PARTICLES_PER_CELL; ++j) {
-      particles[PARTICLES_PER_CELL * i + j] = (particle_s){
+      particles[PARTICLES_PER_CELL * i + j] = (particle_t){
           .type = s[c_i][c_j],
           .x1 = c_j * CELL_H + top_padding + y_gap * (int)(j / DENSITY),
           .x2 = c_i * CELL_W + left_padding + x_gap * (j % DENSITY),
@@ -270,48 +271,56 @@ void add_v2_weight(int idx, float v, float w) {
   }
 }
 
+typedef struct {
+  int idx;
+  float weight;
+} cell_weight_t;
+
 void velocity_to_grid() {
-  particle_s *p = particles;
+  particle_t *p = particles;
   reset_velocity_field();
   for (int i = 0; i < PARTICLE_COUNT; ++i) {
     if (p[i].type != state_water_e)
       continue;
 
     // x velocities: no change on x, staggered upwards by CELL_H / 2
-    int v1_j = p[i].x1 / CELL_W;
-    int v1_i = p[i].x2 / CELL_H - 0.5; // index of top-left corner
-    int v1_idx = v1_i * (SIM_W + 1) + v1_j;
+    int v1_col = p[i].x1 / CELL_W;
+    int v1_row = p[i].x2 / CELL_H - 0.5; // index of top-left corner
+    int v1_i = v1_row * (SIM_W + 1) + v1_col;
 
-    float v1_dx = p[i].x1 - v1_j * CELL_W;
-    float v1_dy = p[i].x2 - (v1_i + 0.5) * CELL_H;
-
-    int v1_itl = v1_idx;
-    int v1_itr = v1_idx + 1;
-    int v1_ibr = v1_idx + (SIM_W + 1) + 1;
-    int v1_ibl = v1_idx + (SIM_W + 1);
-
-    add_v1_weight(v1_itl, p[i].v1, v1_dx * v1_dy);                       // tl
-    add_v1_weight(v1_itr, p[i].v1, (CELL_W - v1_dx) * v1_dy);            // tr
-    add_v1_weight(v1_ibr, p[i].v1, (CELL_W - v1_dx) * (CELL_H - v1_dy)); // br
-    add_v1_weight(v1_ibl, p[i].v1, v1_dx * (CELL_H - v1_dy));            // bl
+    float v1_dx = p[i].x1 - v1_col * CELL_W;
+    float v1_dy = p[i].x2 - (v1_row + 0.5) * CELL_H;
 
     // y velocities: no change on y, staggered left by CELL_W / 2
-    int v2_j = p[i].x1 / CELL_W - 0.5;
-    int v2_i = p[i].x2 / CELL_H;
-    int v2_idx = v2_i * SIM_W + v2_j;
+    int v2_col = p[i].x1 / CELL_W - 0.5;
+    int v2_row = p[i].x2 / CELL_H;
+    int v2_i = v2_row * SIM_W + v2_col;
 
-    float v2_dx = p[i].x1 - (v2_j + 0.5) * CELL_W;
-    float v2_dy = p[i].x2 - v2_i * CELL_H;
+    float v2_dx = p[i].x1 - (v2_col + 0.5) * CELL_W;
+    float v2_dy = p[i].x2 - v2_row * CELL_H;
 
-    int v2_itl = v2_idx;
-    int v2_itr = v2_idx + 1;
-    int v2_ibr = v2_idx + SIM_W + 1;
-    int v2_ibl = v2_idx + SIM_W;
+    // clang-format off
+    cell_weight_t v1_weights[4] = {
+        {v1_i                  , v1_dx            * v1_dy           },
+        {v1_i + 1              , (CELL_W - v1_dx) * v1_dy           },
+        {v1_i + (SIM_W + 1) + 1, (CELL_W - v1_dx) * (CELL_H - v1_dy)},
+        {v1_i + (SIM_W + 1)    , v1_dx            * (CELL_H - v1_dy)}};
 
-    add_v2_weight(v2_itl, p[i].v2, v2_dx * v2_dy);                       // tl
-    add_v2_weight(v2_itr, p[i].v2, (CELL_W - v2_dx) * v2_dy);            // tr
-    add_v2_weight(v2_ibr, p[i].v2, (CELL_W - v2_dx) * (CELL_H - v2_dy)); // br
-    add_v2_weight(v2_ibl, p[i].v2, v2_dx * (CELL_H - v2_dy));            // bl
+    cell_weight_t v2_weights[4] = {
+        {v2_i            ,           v2_dx  *           v2_dy },
+        {v2_i + 1        , (CELL_W - v2_dx) *           v2_dy },
+        {v2_i + SIM_W + 1, (CELL_W - v2_dx) * (CELL_H - v2_dy)},
+        {v2_i + SIM_W    ,           v2_dx  * (CELL_H - v2_dy)}};
+    // clang-format on
+
+    // add weights
+    for (int i = 0; i < 4; ++i) {
+      add_v1_weight(v1_weights[i].idx, p[i].v1, v1_weights[i].weight);
+      add_v2_weight(v2_weights[i].idx, p[i].v2, v2_weights[i].weight);
+    }
+
+    // somehow this looped list pairing thing is faster by 0.1 ms and easier to read
+    // vectorization? i don't even know
   }
 
   for (int i = 0; i < V1N; ++i) {
@@ -397,7 +406,7 @@ void render_simulation(SDL_Renderer *renderer) {
   // draw particles
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
   for (int i = 0; i < PARTICLE_COUNT; ++i) {
-    particle_s p = particles[i];
+    particle_t p = particles[i];
     if (p.type != state_water_e)
       continue;
     SDL_RenderPoint(renderer, p.x1, p.x2);
