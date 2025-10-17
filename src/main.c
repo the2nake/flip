@@ -160,8 +160,8 @@ bool cell_is(int i, int j, state_e_t state) {
 }
 
 bool particle_in(particle_t particle, state_e_t state) {
-  int i = particle.x1 / CELL_W;
-  int j = particle.x2 / CELL_H;
+  int j = particle.x1 / CELL_W;
+  int i = particle.x2 / CELL_H;
   return cell_is(i, j, state); // check bounds to not lose particles
 }
 
@@ -219,6 +219,8 @@ void advection() {
   // TODO? separate particles using LUT method, radix sorting
 
   for (int i = 0; i < PARTICLE_COUNT; ++i) {
+    if (particles[i].type != state_water_e)
+      continue;
     particles[i].v2 += k_gravity * k_timestep;
     float dx1 = particles[i].v1 * k_timestep;
     float dx2 = particles[i].v2 * k_timestep;
