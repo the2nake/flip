@@ -57,11 +57,10 @@ typedef enum {
 } state_e_t;
 
 typedef struct {
-  state_e_t type; // use `state_solid_e` for disabled
-  float x1;       // x position
-  float x2;       // y position
-  float v1;       // x velocity
-  float v2;       // y velocity
+  float x1; // x position
+  float x2; // y position
+  float v1; // x velocity
+  float v2; // y velocity
 } particle_t;
 
 state_e_t s[SIM_H][SIM_W]; // states
@@ -93,6 +92,7 @@ void print_w2s() {
 }
 
 particle_t particles[PARTICLE_COUNT];
+int n_particles = PARTICLE_COUNT;
 
 float *x_vel(int i) {
   if (0 <= i && i < V1N) {
@@ -127,7 +127,7 @@ float clamp(float value, const float lo, const float hi) {
 }
 
 bool cell_in_bounds(int i, int j) {
-  return 0.f <= i && i < SIM_H && 0.f <= j && j < SIM_W;
+  return 0 <= i && i < SIM_H && 0 <= j && j < SIM_W;
 }
 
 bool particle_in_bounds(particle_t *p) {
@@ -209,18 +209,22 @@ void initialise() {
   const float y_gap = (float)CELL_H / DENSITY;
   const float left_padding = x_gap / 2.f;
   const float top_padding = y_gap / 2.f;
-  for (int i = 0; i < SIM_W * SIM_H; ++i) {
-    const int c_i = i / SIM_W;
-    const int c_j = i % SIM_W;
-    for (int j = 0; j < PARTICLES_PER_CELL; ++j) {
-      particles[PARTICLES_PER_CELL * i + j] = (particle_t){
-          .type = s[c_i][c_j],
-          .x1 = c_j * CELL_H + top_padding + y_gap * (int)(j / DENSITY),
-          .x2 = c_i * CELL_W + left_padding + x_gap * (j % DENSITY),
-          .v1 = 0.f,
-          .v2 = 0.f};
+  int idx = 0;
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W; ++j) {
+      if (cell_is(i, j, state_water_e)) {
+        for (int k = 0; k < PARTICLES_PER_CELL; ++k) {
+          particles[idx] = (particle_t){
+              .x1 = j * CELL_W + left_padding + x_gap * (k % DENSITY),
+              .x2 = i * CELL_H + top_padding + y_gap * (int)(k / DENSITY),
+              .v1 = 0.f,
+              .v2 = 0.f};
+          ++idx;
+        }
+      }
     }
   }
+  n_particles = idx;
 }
 
 void advection() {
@@ -233,9 +237,7 @@ void advection() {
     }
   }
 
-  for (int i = 0; i < PARTICLE_COUNT; ++i) {
-    if (particles[i].type != state_water_e)
-      continue;
+  for (int i = 0; i < n_particles; ++i) {
     particles[i].v2 += k_gravity * k_timestep;
     float dx1 = particles[i].v1 * k_timestep;
     float dx2 = particles[i].v2 * k_timestep;
@@ -294,10 +296,7 @@ typedef struct {
 void velocity_to_grid() {
   particle_t *p = particles;
   reset_velocity_field();
-  for (int i = 0; i < PARTICLE_COUNT; ++i) {
-    if (p[i].type != state_water_e)
-      continue;
-
+  for (int i = 0; i < n_particles; ++i) {
     // x velocities: no change on x, staggered upwards by CELL_H / 2
     int v1_col = p[i].x1 / CELL_W;
     int v1_row = p[i].x2 / CELL_H - 0.5; // index of top-left corner
@@ -418,16 +417,13 @@ void render_simulation(SDL_Renderer *renderer) {
   }
   // draw particles
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-  for (int i = 0; i < PARTICLE_COUNT; ++i) {
+  for (int i = 0; i < n_particles; ++i) {
     particle_t p = particles[i];
-    if (p.type != state_water_e)
-      continue;
     SDL_RenderPoint(renderer, p.x1, p.x2);
   }
 }
 
 void setup_scaling(SDL_Window *w, SDL_Renderer *r) {
-
   printf("on wayland, try SDL_VIDEODRIVER=wayland\n\n");
   float content_dpi = SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(w));
   float window_dpi = SDL_GetWindowDisplayScale(w);
