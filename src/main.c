@@ -159,6 +159,14 @@ bool cell_is(int i, int j, state_e_t state) {
   return false;
 }
 
+void set_cell_at(particle_t particle, state_e_t state) {
+  int j = particle.x1 / CELL_W;
+  int i = particle.x2 / CELL_H;
+  if (cell_in_bounds(i, j)) {
+    s[i][j] = state;
+  }
+}
+
 bool particle_in(particle_t particle, state_e_t state) {
   int j = particle.x1 / CELL_W;
   int i = particle.x2 / CELL_H;
@@ -217,6 +225,13 @@ void initialise() {
 
 void advection() {
   // TODO? separate particles using LUT method, radix sorting
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W; ++j) {
+      if (s[i][j] != state_solid_e) {
+        s[i][j] = state_air_e;
+      }
+    }
+  }
 
   for (int i = 0; i < PARTICLE_COUNT; ++i) {
     if (particles[i].type != state_water_e)
@@ -229,16 +244,14 @@ void advection() {
     particles[i].x2 += dx2;
 
     particle_enforce_bounds(&particles[i]);
-
     // TODO? particles bounce off of walls with raycasting
     for (int tries = 0; tries < 10 && particle_in(particles[i], state_solid_e);
          ++tries) {
       particles[i].x1 -= dx1 / BACKTRACK_PRECISION;
       particles[i].x2 -= dx2 / BACKTRACK_PRECISION;
     }
+    set_cell_at(particles[i], state_water_e);
   }
-
-  // TODO! mark cells
 }
 
 void add_v1_weight(int idx, float v, float w) {
