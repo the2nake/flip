@@ -319,19 +319,17 @@ void velocity_to_grid() {
       add_v2_weight(v2_weights[i].idx, p[i].v2, v2_weights[i].weight);
     }
 
-    // somehow this looped list pairing thing is faster by 0.1 ms and easier to read
-    // vectorization? i don't even know
+    // somehow this looped list pairing thing is faster by 0.1 ms and easier to
+    // read. vectorization? i don't even know
   }
 
   for (int i = 0; i < V1N; ++i) {
-    if (isnan(v1[i]) || w1[i] == 0)
-      continue;
-    v1[i] /= w1[i];
+    if (isfinite(v1[i]) && w1[i])
+      v1[i] /= w1[i];
   }
   for (int i = 0; i < V2N; ++i) {
-    if (isnan(v2[i]) || w2[i] == 0)
-      continue;
-    v2[i] /= w2[i];
+    if (isfinite(v2[i]) && w2[i])
+      v2[i] /= w2[i];
   }
 }
 
