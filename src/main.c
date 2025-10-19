@@ -41,11 +41,7 @@ const int k_iters = 40;
 
 float now() { return (float)clock() / CLOCKS_PER_SEC; }
 
-typedef enum {
-  state_solid_e = 0,
-  state_water_e = 1,
-  state_air_e = 2
-} state_e_t;
+typedef enum { solid_e = 0, water_e = 1, air_e = 2 } state_e_t;
 
 typedef struct {
   float x1; // x position
@@ -183,38 +179,35 @@ void reset_velocity_field() {
   }
 }
 
+void set_state_half_water_box() {
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W; ++j) {
+      if (cell_on_edge(i, j)) {
+        s[i][j] = solid_e;
+      } else if (j < SIM_W / 2) {
+        s[i][j] = water_e;
+      } else {
+        s[i][j] = air_e;
+      }
+    }
+  }
+}
+
 int count_water_cells() {
   int res = 0;
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      if (cell_is(i, j, state_water_e)) {
+      if (cell_is(i, j, water_e))
         ++res;
-      }
     }
   }
   return res;
 }
 
-void initialise() {
-  for (int i = 0; i < SIM_H; ++i) {
-    for (int j = 0; j < SIM_W; ++j) {
-      if (cell_on_edge(i, j)) {
-        s[i][j] = state_solid_e;
-      } else if (j < SIM_W / 2) {
-        s[i][j] = state_water_e;
-      } else {
-        s[i][j] = state_air_e;
-      }
-    }
-  }
-
-  reset_velocity_field();
-
-  // initialise particles
+void distribute_particles() {
   particles = malloc(n_particles * sizeof(particle_t));
   n_particles = PARTICLES_PER_CELL * count_water_cells();
 
-  // distribute particles evenly inside water cells
   constexpr float x_gap = (float)CELL_W / DENSITY;
   constexpr float y_gap = (float)CELL_H / DENSITY;
   constexpr float left_padding = x_gap / 2.f;
@@ -223,30 +216,41 @@ void initialise() {
   int idx = 0;
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      if (cell_is(i, j, state_water_e)) {
-        for (int k = 0; k < PARTICLES_PER_CELL; ++k) {
-          particles[idx] = (particle_t){
-              .x1 = j * CELL_W + left_padding + x_gap * (k % DENSITY),
-              .x2 = i * CELL_H + top_padding + y_gap * (int)(k / DENSITY),
-              .v1 = 0.f,
-              .v2 = 0.f};
-          ++idx;
-        }
+      if (!cell_is(i, j, water_e))
+        continue;
+
+      for (int k = 0; k < PARTICLES_PER_CELL; ++k) {
+        particles[idx] = (particle_t){
+            .x1 = j * CELL_W + left_padding + x_gap * (k % DENSITY),
+            .x2 = i * CELL_H + top_padding + y_gap * (int)(k / DENSITY),
+            .v1 = 0.f,
+            .v2 = 0.f};
+        ++idx;
       }
     }
   }
 }
 
+void initialise() {
+  set_state_half_water_box();
+
+  reset_velocity_field();
+
+  distribute_particles();
+}
+
 void advection() {
   // TODO? separate particles using LUT method, radix sorting
+  // set fluid cells to air
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      if (s[i][j] != state_solid_e) {
-        s[i][j] = state_air_e;
+      if (s[i][j] != solid_e) {
+        s[i][j] = air_e;
       }
     }
   }
 
+  // update particle locations and cell states
   for (int i = 0; i < n_particles; ++i) {
     particles[i].v2 += k_gravity * k_timestep;
     float dx1 = particles[i].v1 * k_timestep;
@@ -257,23 +261,24 @@ void advection() {
 
     particle_enforce_bounds(&particles[i]);
     // TODO? particles bounce off of walls with raycasting
-    for (int tries = 0; tries < 10 && particle_in(particles[i], state_solid_e);
+    for (int tries = 0; tries < 10 && particle_in(particles[i], solid_e);
          ++tries) {
       particles[i].x1 -= dx1 / BACKTRACK_PRECISION;
       particles[i].x2 -= dx2 / BACKTRACK_PRECISION;
     }
-    set_cell_at(particles[i], state_water_e);
+    set_cell_at(particles[i], water_e);
   }
 }
 
 void add_v1_weight(int idx, float v, float w) {
-  if (!in_rangei(idx, 0, V1N)) {
+  if (!in_rangei(idx, 0, V1N))
     return;
-  }
+
   int i = idx / (SIM_W + 1);
   int j = idx % (SIM_W + 1);
 
-  if (cell_is(i, j - 1, state_water_e) || cell_is(i, j, state_water_e)) {
+  bool v1_is_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
+  if (v1_is_water) {
     v1[idx] += w * v;
     w1[idx] += w;
   } else {
@@ -283,13 +288,14 @@ void add_v1_weight(int idx, float v, float w) {
 }
 
 void add_v2_weight(int idx, float v, float w) {
-  if (!in_rangei(idx, 0, V2N)) {
+  if (!in_rangei(idx, 0, V2N))
     return;
-  }
+
   int i = idx / SIM_W;
   int j = idx % SIM_W;
 
-  if (cell_is(i - 1, j, state_water_e) || cell_is(i, j, state_water_e)) {
+  bool v2_is_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
+  if (v2_is_water) {
     v2[idx] += w * v;
     w2[idx] += w;
   } else {
@@ -309,8 +315,8 @@ void velocity_to_grid() {
   for (int i = 0; i < n_particles; ++i) {
     // x velocities: no change on x, staggered upwards by CELL_H / 2
     int v1_col = p[i].x1 / CELL_W;
-    int v1_row = p[i].x2 / CELL_H - 0.5; // index of top-left corner
-    int v1_i = v1_row * (SIM_W + 1) + v1_col;
+    int v1_row = p[i].x2 / CELL_H - 0.5;
+    int v1_i = v1_row * (SIM_W + 1) + v1_col; // index of top-left x vel
 
     float v1_dx = p[i].x1 - v1_col * CELL_W;
     float v1_dy = p[i].x2 - (v1_row + 0.5) * CELL_H;
@@ -318,7 +324,7 @@ void velocity_to_grid() {
     // y velocities: no change on y, staggered left by CELL_W / 2
     int v2_col = p[i].x1 / CELL_W - 0.5;
     int v2_row = p[i].x2 / CELL_H;
-    int v2_i = v2_row * SIM_W + v2_col;
+    int v2_i = v2_row * SIM_W + v2_col; // index of top-left y vel
 
     float v2_dx = p[i].x1 - (v2_col + 0.5) * CELL_W;
     float v2_dy = p[i].x2 - v2_row * CELL_H;
@@ -326,15 +332,15 @@ void velocity_to_grid() {
     // clang-format off
     cell_weight_t v1_weights[4] = {
         {v1_i                  , v1_dx            * v1_dy           },
-        {v1_i + 1              , (CELL_W - v1_dx) * v1_dy           },
-        {v1_i + (SIM_W + 1) + 1, (CELL_W - v1_dx) * (CELL_H - v1_dy)},
-        {v1_i + (SIM_W + 1)    , v1_dx            * (CELL_H - v1_dy)}};
+        {v1_i + (SIM_W + 1)    , v1_dx            * (CELL_H - v1_dy)},
+        {v1_i               + 1, (CELL_W - v1_dx) * v1_dy           },
+        {v1_i + (SIM_W + 1) + 1, (CELL_W - v1_dx) * (CELL_H - v1_dy)}};
 
     cell_weight_t v2_weights[4] = {
         {v2_i            ,           v2_dx  *           v2_dy },
-        {v2_i + 1        , (CELL_W - v2_dx) *           v2_dy },
-        {v2_i + SIM_W + 1, (CELL_W - v2_dx) * (CELL_H - v2_dy)},
-        {v2_i + SIM_W    ,           v2_dx  * (CELL_H - v2_dy)}};
+        {v2_i + SIM_W    ,           v2_dx  * (CELL_H - v2_dy)},
+        {v2_i         + 1, (CELL_W - v2_dx) *           v2_dy },
+        {v2_i + SIM_W + 1, (CELL_W - v2_dx) * (CELL_H - v2_dy)}};
     // clang-format on
 
     // add weights
@@ -368,10 +374,10 @@ void projection(int iters) {
           continue;
         }
 
-        bool sl = s[i][j - 1] == state_water_e;
-        bool sr = s[i][j + 1] == state_water_e;
-        bool su = s[i - 1][j] == state_water_e;
-        bool sd = s[i + 1][j] == state_water_e;
+        bool sl = s[i][j - 1] == water_e;
+        bool sr = s[i][j + 1] == water_e;
+        bool su = s[i - 1][j] == water_e;
+        bool sd = s[i + 1][j] == water_e;
         float s = sl + sr + su + sd;
         if (sl & sr & su & sd == 0) {
           continue;
@@ -409,15 +415,15 @@ void render_simulation(SDL_Renderer *renderer) {
       SDL_FRect rect = {
           .x = CELL_W * j, .y = CELL_H * i, .w = CELL_W, .h = CELL_H};
       switch (s[i][j]) {
-      case state_water_e:
+      case water_e:
         SDL_SetRenderDrawColor(renderer, c_fluid.r, c_fluid.g, c_fluid.b,
                                SDL_ALPHA_OPAQUE);
         break;
-      case state_solid_e:
+      case solid_e:
         SDL_SetRenderDrawColor(renderer, c_wall.r, c_wall.g, c_wall.b,
                                SDL_ALPHA_OPAQUE);
         break;
-      case state_air_e:
+      case air_e:
         SDL_SetRenderDrawColor(renderer, c_air.r, c_air.g, c_air.b,
                                SDL_ALPHA_OPAQUE);
         break;
