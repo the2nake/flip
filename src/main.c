@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 #include <SDL3/SDL.h>
@@ -84,7 +85,7 @@ void print_w2s() {
   printf("========================================\n");
 }
 
-particle_t particles[MAX_PARTICLES];
+particle_t *particles;
 int n_particles = MAX_PARTICLES;
 
 float *x_vel(int i) {
@@ -182,6 +183,18 @@ void reset_velocity_field() {
   }
 }
 
+int count_water_cells() {
+  int res = 0;
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W; ++j) {
+      if (cell_is(i, j, state_water_e)) {
+        ++res;
+      }
+    }
+  }
+  return res;
+}
+
 void initialise() {
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
@@ -197,11 +210,16 @@ void initialise() {
 
   reset_velocity_field();
 
-  // distribute particles evenly inside cells
-  const float x_gap = (float)CELL_W / DENSITY;
-  const float y_gap = (float)CELL_H / DENSITY;
-  const float left_padding = x_gap / 2.f;
-  const float top_padding = y_gap / 2.f;
+  // initialise particles
+  particles = malloc(n_particles * sizeof(particle_t));
+  n_particles = PARTICLES_PER_CELL * count_water_cells();
+
+  // distribute particles evenly inside water cells
+  constexpr float x_gap = (float)CELL_W / DENSITY;
+  constexpr float y_gap = (float)CELL_H / DENSITY;
+  constexpr float left_padding = x_gap / 2.f;
+  constexpr float top_padding = y_gap / 2.f;
+
   int idx = 0;
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
@@ -217,7 +235,6 @@ void initialise() {
       }
     }
   }
-  n_particles = idx;
 }
 
 void advection() {
@@ -485,6 +502,8 @@ int main() {
     SDL_Delay(1000 * fmax(k_frametime - (now() - t0), 0.f));
     ++cycles;
   }
+
+  free(particles);
 
   printf("\n -- finished -- \n\n");
 
