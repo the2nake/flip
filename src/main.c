@@ -21,7 +21,7 @@ constexpr int CELL_H = CELL_W;
 
 constexpr int DENSITY = 2;
 constexpr int PARTICLES_PER_CELL = DENSITY * DENSITY;
-constexpr int PARTICLE_COUNT = PARTICLES_PER_CELL * SIM_W * SIM_H;
+constexpr int MAX_PARTICLES = PARTICLES_PER_CELL * SIM_W * SIM_H;
 
 constexpr int BACKTRACK_PRECISION = 4;
 
@@ -31,9 +31,6 @@ constexpr int BACKTRACK_PRECISION = 4;
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;
 constexpr float WINDOW_SCALE = 2.f;
-
-constexpr int V1N = (SIM_W + 1) * SIM_H;
-constexpr int V2N = SIM_W * (SIM_H + 1);
 
 const float k_frametime = 1.0 / 60.0;
 const float k_timestep = 1.0 / 60.0;
@@ -55,6 +52,9 @@ typedef struct {
   float v1; // x velocity
   float v2; // y velocity
 } particle_t;
+
+constexpr int V1N = (SIM_W + 1) * SIM_H;
+constexpr int V2N = SIM_W * (SIM_H + 1);
 
 state_e_t s[SIM_H][SIM_W]; // states
 float v1[V1N];             // horizontal velocity
@@ -84,8 +84,8 @@ void print_w2s() {
   printf("========================================\n");
 }
 
-particle_t particles[PARTICLE_COUNT];
-int n_particles = PARTICLE_COUNT;
+particle_t particles[MAX_PARTICLES];
+int n_particles = MAX_PARTICLES;
 
 float *x_vel(int i) {
   if (0 <= i && i < V1N) {
