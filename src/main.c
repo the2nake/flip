@@ -8,11 +8,15 @@
 #include <SDL3/SDL_main.h>
 
 /*
-future considerations
+TODO: future considerations
 cache locality
 more efficient data type for copy away from grid velocities
 using restrict keyword on pointers?
 */
+
+//==================
+//    PARAMETERS
+//==================
 
 constexpr int SIM_W = 20;
 constexpr int SIM_H = 20;
@@ -59,7 +63,12 @@ float v2[V2N];             // vertical velocity
 float w1[V1N];             // fixed point weights
 float w2[V2N];             // fixed point weights
 
-// * debug functions
+particle_t *particles;
+int n_particles = MAX_PARTICLES;
+
+//=============
+//    DEBUG
+//=============
 
 void print_v2s() {
   for (int i = 0; i < SIM_H + 1; ++i) {
@@ -81,8 +90,9 @@ void print_w2s() {
   printf("========================================\n");
 }
 
-particle_t *particles;
-int n_particles = MAX_PARTICLES;
+//=============
+//    UTILS
+//=============
 
 float *x_vel(int i) {
   if (0 <= i && i < V1N) {
@@ -167,6 +177,113 @@ float particle_velocity(particle_t *p) {
   return sqrtf(p->v1 * p->v1 + p->v2 * p->v2);
 }
 
+//=============
+//    MAIN
+//=============
+
+void setup_scaling(SDL_Window *window, SDL_Renderer *renderer);
+
+void initialise();
+void set_state_half_water_box();
+void reset_velocity_field();
+void distribute_particles();
+int count_water_cells();
+
+void advection();
+
+void v_particles_to_grid();
+void add_v1_weight(int idx, float v, float w);
+void add_v2_weight(int idx, float v, float w);
+
+void projection(int iters);
+
+void v_grid_to_particles();
+
+void render_simulation(SDL_Renderer *renderer);
+
+int main() {
+  printf("\n");
+
+  SDL_Init(SDL_INIT_VIDEO);
+
+  SDL_Window *window =
+      SDL_CreateWindow("ffs", WINDOW_W * WINDOW_SCALE, WINDOW_H * WINDOW_SCALE,
+                       SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
+
+  setup_scaling(window, renderer);
+
+  printf(" -- running flip fluid simulator -- \n\n");
+
+  bool running = true;
+
+  float update_time = 0.0;
+  long long cycles = 0;
+
+  initialise();
+
+  while (running) {
+    float t0 = now();
+
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+      switch (event.type) {
+      case SDL_EVENT_QUIT:
+        running = false;
+        break;
+      default:
+        break;
+      }
+    }
+
+    // simulation code
+
+    advection();
+    v_particles_to_grid();
+    // projection(k_iters);
+    v_grid_to_particles();
+
+    update_time += now() - t0;
+
+    // rendering code
+
+    render_simulation(renderer);
+
+    SDL_RenderPresent(renderer);
+
+    SDL_Delay(1000 * fmax(k_frametime - (now() - t0), 0.f));
+    ++cycles;
+  }
+
+  free(particles);
+
+  printf("\n -- finished -- \n\n");
+
+  printf("time per cycle: %f ms\n\n", 1000.0 * update_time / cycles);
+
+  return 0;
+}
+
+void setup_scaling(SDL_Window *w, SDL_Renderer *r) {
+  printf("on wayland, try SDL_VIDEODRIVER=wayland\n\n");
+  float content_dpi = SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(w));
+  float window_dpi = SDL_GetWindowDisplayScale(w);
+  float pixel_density = SDL_GetWindowPixelDensity(w);
+
+  printf("content dpi scaling: %.2f\n", content_dpi);
+  printf("window dpi scaling: %.2f\n", window_dpi);
+  printf("window pixel density: %.2f\n\n", pixel_density);
+
+  float scale = pixel_density * WINDOW_SCALE;
+  SDL_SetRenderScale(r, scale, scale);
+}
+
+void initialise() {
+  set_state_half_water_box();
+  reset_velocity_field();
+  distribute_particles();
+}
+
 void reset_velocity_field() {
   for (int i = 0; i < V1N; ++i) {
     v1[i] = 0.f;
@@ -191,17 +308,6 @@ void set_state_half_water_box() {
       }
     }
   }
-}
-
-int count_water_cells() {
-  int res = 0;
-  for (int i = 0; i < SIM_H; ++i) {
-    for (int j = 0; j < SIM_W; ++j) {
-      if (cell_is(i, j, water_e))
-        ++res;
-    }
-  }
-  return res;
 }
 
 void distribute_particles() {
@@ -231,12 +337,15 @@ void distribute_particles() {
   }
 }
 
-void initialise() {
-  set_state_half_water_box();
-
-  reset_velocity_field();
-
-  distribute_particles();
+int count_water_cells() {
+  int res = 0;
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W; ++j) {
+      if (cell_is(i, j, water_e))
+        ++res;
+    }
+  }
+  return res;
 }
 
 void advection() {
@@ -270,46 +379,12 @@ void advection() {
   }
 }
 
-void add_v1_weight(int idx, float v, float w) {
-  if (!in_rangei(idx, 0, V1N))
-    return;
-
-  int i = idx / (SIM_W + 1);
-  int j = idx % (SIM_W + 1);
-
-  bool v1_is_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
-  if (v1_is_water) {
-    v1[idx] += w * v;
-    w1[idx] += w;
-  } else {
-    v1[idx] = NAN;
-    w1[idx] = 0;
-  }
-}
-
-void add_v2_weight(int idx, float v, float w) {
-  if (!in_rangei(idx, 0, V2N))
-    return;
-
-  int i = idx / SIM_W;
-  int j = idx % SIM_W;
-
-  bool v2_is_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
-  if (v2_is_water) {
-    v2[idx] += w * v;
-    w2[idx] += w;
-  } else {
-    v2[idx] = NAN;
-    w2[idx] = 0;
-  }
-}
-
 typedef struct {
   int idx;
   float weight;
 } cell_weight_t;
 
-void velocity_to_grid() {
+void v_particles_to_grid() {
   particle_t *p = particles;
   reset_velocity_field();
   for (int i = 0; i < n_particles; ++i) {
@@ -363,6 +438,40 @@ void velocity_to_grid() {
   }
 }
 
+void add_v1_weight(int idx, float v, float w) {
+  if (!in_rangei(idx, 0, V1N))
+    return;
+
+  int i = idx / (SIM_W + 1);
+  int j = idx % (SIM_W + 1);
+
+  bool v1_is_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
+  if (v1_is_water) {
+    v1[idx] += w * v;
+    w1[idx] += w;
+  } else {
+    v1[idx] = NAN;
+    w1[idx] = 0;
+  }
+}
+
+void add_v2_weight(int idx, float v, float w) {
+  if (!in_rangei(idx, 0, V2N))
+    return;
+
+  int i = idx / SIM_W;
+  int j = idx % SIM_W;
+
+  bool v2_is_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
+  if (v2_is_water) {
+    v2[idx] += w * v;
+    w2[idx] += w;
+  } else {
+    v2[idx] = NAN;
+    w2[idx] = 0;
+  }
+}
+
 void projection(int iters) {
   // TODO! fix for handling nan cells
   // TODO: compensate for high density areas
@@ -370,9 +479,8 @@ void projection(int iters) {
   for (int n = 0; n < iters; ++n) {
     for (int i = 1; i < SIM_H - 1; ++i) {
       for (int j = 1; j < SIM_W - 1; ++j) {
-        if (cell_is(i, j, state_solid_e)) {
+        if (!cell_is(i, j, water_e))
           continue;
-        }
 
         bool sl = s[i][j - 1] == water_e;
         bool sr = s[i][j + 1] == water_e;
@@ -402,7 +510,7 @@ void projection(int iters) {
   }
 }
 
-void distribute_to_particles() {}
+void v_grid_to_particles() {}
 
 void render_simulation(SDL_Renderer *renderer) {
   // draw cells
@@ -437,83 +545,4 @@ void render_simulation(SDL_Renderer *renderer) {
     particle_t p = particles[i];
     SDL_RenderPoint(renderer, p.x1, p.x2);
   }
-}
-
-void setup_scaling(SDL_Window *w, SDL_Renderer *r) {
-  printf("on wayland, try SDL_VIDEODRIVER=wayland\n\n");
-  float content_dpi = SDL_GetDisplayContentScale(SDL_GetDisplayForWindow(w));
-  float window_dpi = SDL_GetWindowDisplayScale(w);
-  float pixel_density = SDL_GetWindowPixelDensity(w);
-
-  printf("content dpi scaling: %.2f\n", content_dpi);
-  printf("window dpi scaling: %.2f\n", window_dpi);
-  printf("window pixel density: %.2f\n\n", pixel_density);
-
-  float scale = pixel_density * WINDOW_SCALE;
-  SDL_SetRenderScale(r, scale, scale);
-}
-
-int main() {
-  printf("\n");
-
-  SDL_Init(SDL_INIT_VIDEO);
-
-  SDL_Window *window =
-      SDL_CreateWindow("ffs", WINDOW_W * WINDOW_SCALE, WINDOW_H * WINDOW_SCALE,
-                       SDL_WINDOW_HIGH_PIXEL_DENSITY);
-  SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
-
-  setup_scaling(window, renderer);
-
-  printf(" -- running flip fluid simulator -- \n\n");
-
-  bool running = true;
-
-  float update_time = 0.0;
-  long long cycles = 0;
-
-  initialise();
-
-  while (running) {
-    float t0 = now();
-
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-      switch (event.type) {
-      case SDL_EVENT_QUIT:
-        running = false;
-        break;
-      default:
-        break;
-      }
-    }
-
-    // simulation code
-
-    advection();
-    velocity_to_grid();
-    // projection(k_iters);
-    // distribute_to_particles();
-
-    float update1 = now();
-    update_time += update1 - t0;
-
-    // rendering code
-
-    render_simulation(renderer);
-
-    SDL_RenderPresent(renderer);
-
-    float t1 = now();
-    SDL_Delay(1000 * fmax(k_frametime - (now() - t0), 0.f));
-    ++cycles;
-  }
-
-  free(particles);
-
-  printf("\n -- finished -- \n\n");
-
-  printf("time per cycle: %f ms\n\n", 1000.0 * update_time / cycles);
-
-  return 0;
 }
