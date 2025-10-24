@@ -62,6 +62,8 @@ float v1[V1N];             // horizontal velocity
 float v2[V2N];             // vertical velocity
 float w1[V1N];             // fixed point weights
 float w2[V2N];             // fixed point weights
+float v1_prior[V1N];
+float v2_prior[V1N];
 
 particle_t *particles;
 int n_particles = MAX_PARTICLES;
@@ -94,36 +96,20 @@ void print_w2s() {
 //    UTILS
 //=============
 
-float *x_vel(int i) {
-  if (0 <= i && i < V1N) {
-    return &v1[i];
-  } else {
-    return NULL;
-  }
+int in_rangei(int val, int lo, int hi) { return lo <= val && val <= hi; }
+
+float in_rangef(float val, float lo, float hi) {
+  return lo <= val && val <= hi;
 }
 
-float *y_vel(int i) {
-  if (0 <= i && i < V2N) {
-    return &v2[i];
-  } else {
-    return NULL;
-  }
-}
-
-int in_rangei(int value, int lo, int hi) { return lo <= value && value <= hi; }
-
-float in_rangef(float value, float lo, float hi) {
-  return lo <= value && value <= hi;
-}
-
-float clamp(float value, const float lo, const float hi) {
-  if (value > hi) {
+float clamp(float val, const float lo, const float hi) {
+  if (val > hi) {
     return hi;
   }
-  if (value < lo) {
+  if (val < lo) {
     return lo;
   }
-  return value;
+  return val;
 }
 
 bool cell_in_bounds(int i, int j) {
@@ -140,6 +126,37 @@ void particle_enforce_bounds(particle_t *p) {
     p->x1 = clamp(p->x1, 0.f, SIM_W * CELL_W);
     p->x2 = clamp(p->x2, 0.f, SIM_H * CELL_H);
   }
+}
+
+// index of top-left x vel
+int particle_v1_index(particle_t *p) {
+  int v1_col = p->x1 / CELL_W;
+  int v1_row = p->x2 / CELL_H - 0.5;
+  return v1_row * (SIM_W + 1) + v1_col;
+}
+
+// index of top-left y vel
+int particle_v2_index(particle_t *p) {
+  int v2_col = p->x1 / CELL_W - 0.5;
+  int v2_row = p->x2 / CELL_H;
+  return v2_row * SIM_W + v2_col;
+}
+
+void coordinates_from_index(int index, int row_width, int *row, int *col) {
+  *row = index / row_width;
+  *col = index % row_width;
+}
+
+void position_in_v1_grid(particle_t *p, int row, int col, float *dx,
+                         float *dy) {
+  *dx = p->x1 - col * CELL_W;
+  *dy = p->x2 - (row + 0.5) * CELL_H;
+}
+
+void position_in_v2_grid(particle_t *p, int row, int col, float *dx,
+                         float *dy) {
+  *dx = p->x1 - (col + 0.5) * CELL_W;
+  *dy = p->x2 - row * CELL_H;
 }
 
 bool cell_on_edge(int i, int j) {
@@ -173,9 +190,7 @@ bool particle_in(particle_t particle, state_e_t state) {
   return cell_is(i, j, state); // check bounds to not lose particles
 }
 
-float particle_velocity(particle_t *p) {
-  return sqrtf(p->v1 * p->v1 + p->v2 * p->v2);
-}
+float particle_velocity(particle_t *p) { return hypot(p->v1, p->v2); }
 
 //=============
 //    MAIN
@@ -188,6 +203,7 @@ void set_state_half_water_box();
 void reset_velocity_field();
 void distribute_particles();
 int count_water_cells();
+void update_prior_velocities();
 
 void advection();
 
@@ -280,20 +296,9 @@ void setup_scaling(SDL_Window *w, SDL_Renderer *r) {
 
 void initialise() {
   set_state_half_water_box();
-  reset_velocity_field();
   distribute_particles();
-}
-
-void reset_velocity_field() {
-  for (int i = 0; i < V1N; ++i) {
-    v1[i] = 0.f;
-    w1[i] = 1.f;
-  }
-
-  for (int i = 0; i < V2N; ++i) {
-    v2[i] = 0.f;
-    w1[i] = 1.f;
-  }
+  reset_velocity_field();
+  update_prior_velocities();
 }
 
 void set_state_half_water_box() {
@@ -348,6 +353,24 @@ int count_water_cells() {
   return res;
 }
 
+// TODO! use nan for cell boundaries not including water
+void reset_velocity_field() {
+  for (int i = 0; i < V1N; ++i) {
+    v1[i] = 0.f;
+    w1[i] = 1.f;
+  }
+
+  for (int i = 0; i < V2N; ++i) {
+    v2[i] = 0.f;
+    w1[i] = 1.f;
+  }
+}
+
+void update_prior_velocities() {
+  memcpy(v1_prior, v1, V1N * sizeof(float));
+  memcpy(v2_prior, v2, V2N * sizeof(float));
+}
+
 void advection() {
   // TODO? separate particles using LUT method, radix sorting
   // set fluid cells to air
@@ -388,21 +411,18 @@ void v_particles_to_grid() {
   particle_t *p = particles;
   reset_velocity_field();
   for (int i = 0; i < n_particles; ++i) {
+    int v1_i = particle_v1_index(&p[i]); // index of top-left x vel
+    int v2_i = particle_v2_index(&p[i]); // index of top-left y vel
+
+    int v1_row, v1_col, v2_row, v2_col;
+    coordinates_from_index(v1_i, SIM_W + 1, &v1_row, &v1_col);
+    coordinates_from_index(v2_i, SIM_W, &v2_row, &v2_col);
+
     // x velocities: no change on x, staggered upwards by CELL_H / 2
-    int v1_col = p[i].x1 / CELL_W;
-    int v1_row = p[i].x2 / CELL_H - 0.5;
-    int v1_i = v1_row * (SIM_W + 1) + v1_col; // index of top-left x vel
-
-    float v1_dx = p[i].x1 - v1_col * CELL_W;
-    float v1_dy = p[i].x2 - (v1_row + 0.5) * CELL_H;
-
     // y velocities: no change on y, staggered left by CELL_W / 2
-    int v2_col = p[i].x1 / CELL_W - 0.5;
-    int v2_row = p[i].x2 / CELL_H;
-    int v2_i = v2_row * SIM_W + v2_col; // index of top-left y vel
-
-    float v2_dx = p[i].x1 - (v2_col + 0.5) * CELL_W;
-    float v2_dy = p[i].x2 - v2_row * CELL_H;
+    float v1_dx, v1_dy, v2_dx, v2_dy;
+    position_in_v1_grid(&p[i], v1_row, v1_col, &v1_dx, &v1_dy);
+    position_in_v2_grid(&p[i], v2_row, v2_col, &v2_dx, &v2_dy);
 
     // clang-format off
     cell_weight_t v1_weights[4] = {
@@ -436,6 +456,8 @@ void v_particles_to_grid() {
     if (isfinite(v2[i]) && w2[i])
       v2[i] /= w2[i];
   }
+
+  update_prior_velocities();
 }
 
 void add_v1_weight(int idx, float v, float w) {
@@ -473,7 +495,7 @@ void add_v2_weight(int idx, float v, float w) {
 }
 
 void projection(int iters) {
-  // TODO! fix for handling nan cells
+  // TODO! check nan cells are done correctly (PROBABLY NOT)
   // TODO: compensate for high density areas
   // TODO? do you handle incompressibility including air/water boundaries?
   for (int n = 0; n < iters; ++n) {
