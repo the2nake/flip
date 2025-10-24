@@ -72,10 +72,30 @@ int n_particles = MAX_PARTICLES;
 //    DEBUG
 //=============
 
+void print_v1s() {
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W + 1; ++j) {
+      printf("%4.1f ", v1[(SIM_W + 1) * i + j]);
+    }
+    printf("\n");
+  }
+  printf("========================================\n");
+}
+
 void print_v2s() {
   for (int i = 0; i < SIM_H + 1; ++i) {
-    for (int j = 0; j < SIM_H; ++j) {
+    for (int j = 0; j < SIM_W; ++j) {
       printf("%4.1f ", v2[SIM_W * i + j]);
+    }
+    printf("\n");
+  }
+  printf("========================================\n");
+}
+
+void print_w1s() {
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W + 1; ++j) {
+      printf("%.1f ", w1[(SIM_W + 1) * i + j]);
     }
     printf("\n");
   }
@@ -84,7 +104,7 @@ void print_v2s() {
 
 void print_w2s() {
   for (int i = 0; i < SIM_H + 1; ++i) {
-    for (int j = 0; j < SIM_H; ++j) {
+    for (int j = 0; j < SIM_W; ++j) {
       printf("%.1f ", w2[SIM_W * i + j]);
     }
     printf("\n");
@@ -256,7 +276,7 @@ int main() {
 
     advection();
     v_particles_to_grid();
-    // projection(k_iters);
+    projection(k_iters);
     v_grid_to_particles();
 
     update_time += now() - t0;
@@ -509,7 +529,7 @@ void projection(int iters) {
         bool su = s[i - 1][j] == water_e;
         bool sd = s[i + 1][j] == water_e;
         float s = sl + sr + su + sd;
-        if (sl & sr & su & sd == 0) {
+        if (sl + sr + su + sd == 0) {
           continue;
         }
 
@@ -519,7 +539,7 @@ void projection(int iters) {
         float *vl = &v1[v1_i];
         float *vr = &v1[v1_i + 1];
         float *vu = &v2[v2_i];
-        float *vd = &v2[v2_i + (SIM_W + 1)];
+        float *vd = &v2[v2_i + SIM_W];
 
         float flow = k_relax * (-*vl + *vr + -*vu + *vd);
 
