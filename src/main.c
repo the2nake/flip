@@ -1,11 +1,14 @@
+#include <SDL3/SDL_pixels.h>
+#include <SDL3/SDL_render.h>
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+
+#include "flip.h"
 
 /*
 TODO: future considerations
@@ -14,204 +17,6 @@ more efficient data type for copy away from grid velocities
 using restrict keyword on pointers?
 */
 
-//==================
-//    PARAMETERS
-//==================
-
-constexpr int SIM_W = 20;
-constexpr int SIM_H = 20;
-
-constexpr int CELL_W = 10;
-constexpr int CELL_H = CELL_W;
-
-constexpr int DENSITY = 2;
-constexpr int PARTICLES_PER_CELL = DENSITY * DENSITY;
-constexpr int MAX_PARTICLES = PARTICLES_PER_CELL * SIM_W * SIM_H;
-
-constexpr int BACKTRACK_PRECISION = 4;
-
-// TODO! convert window_scale to internal difference between graphical and
-// internal scale
-
-constexpr int WINDOW_W = SIM_W * CELL_W;
-constexpr int WINDOW_H = SIM_H * CELL_H;
-constexpr float WINDOW_SCALE = 2.f;
-
-const float k_frametime = 1.0 / 60.0;
-const float k_timestep = 1.0 / 60.0;
-const float k_gravity = 9.81;
-const float k_relax = 1.9;
-const int k_iters = 40;
-
-float now() { return (float)clock() / CLOCKS_PER_SEC; }
-
-typedef enum { solid_e = 0, water_e = 1, air_e = 2 } state_e_t;
-
-typedef struct {
-  float x1; // x position
-  float x2; // y position
-  float v1; // x velocity
-  float v2; // y velocity
-} particle_t;
-
-constexpr int V1N = (SIM_W + 1) * SIM_H;
-constexpr int V2N = SIM_W * (SIM_H + 1);
-
-state_e_t s[SIM_H][SIM_W]; // states
-float v1[V1N];             // horizontal velocity
-float v2[V2N];             // vertical velocity
-float w1[V1N];             // fixed point weights
-float w2[V2N];             // fixed point weights
-float v1_prior[V1N];
-float v2_prior[V1N];
-
-particle_t *particles;
-int n_particles = MAX_PARTICLES;
-
-//=============
-//    DEBUG
-//=============
-
-void print_v1s() {
-  for (int i = 0; i < SIM_H; ++i) {
-    for (int j = 0; j < SIM_W + 1; ++j) {
-      printf("%4.1f ", v1[(SIM_W + 1) * i + j]);
-    }
-    printf("\n");
-  }
-  printf("========================================\n");
-}
-
-void print_v2s() {
-  for (int i = 0; i < SIM_H + 1; ++i) {
-    for (int j = 0; j < SIM_W; ++j) {
-      printf("%4.1f ", v2[SIM_W * i + j]);
-    }
-    printf("\n");
-  }
-  printf("========================================\n");
-}
-
-void print_w1s() {
-  for (int i = 0; i < SIM_H; ++i) {
-    for (int j = 0; j < SIM_W + 1; ++j) {
-      printf("%.1f ", w1[(SIM_W + 1) * i + j]);
-    }
-    printf("\n");
-  }
-  printf("========================================\n");
-}
-
-void print_w2s() {
-  for (int i = 0; i < SIM_H + 1; ++i) {
-    for (int j = 0; j < SIM_W; ++j) {
-      printf("%.1f ", w2[SIM_W * i + j]);
-    }
-    printf("\n");
-  }
-  printf("========================================\n");
-}
-
-//=============
-//    UTILS
-//=============
-
-int in_rangei(int val, int lo, int hi) { return lo <= val && val <= hi; }
-
-float in_rangef(float val, float lo, float hi) {
-  return lo <= val && val <= hi;
-}
-
-float clamp(float val, const float lo, const float hi) {
-  if (val > hi) {
-    return hi;
-  }
-  if (val < lo) {
-    return lo;
-  }
-  return val;
-}
-
-bool cell_in_bounds(int i, int j) {
-  return 0 <= i && i < SIM_H && 0 <= j && j < SIM_W;
-}
-
-bool particle_in_bounds(particle_t *p) {
-  return 0.f <= p->x1 && p->x1 <= SIM_W * CELL_W && 0.f <= p->x2 &&
-         p->x2 <= SIM_H * CELL_H;
-}
-
-void particle_enforce_bounds(particle_t *p) {
-  if (!particle_in_bounds(p)) {
-    p->x1 = clamp(p->x1, 0.f, SIM_W * CELL_W);
-    p->x2 = clamp(p->x2, 0.f, SIM_H * CELL_H);
-  }
-}
-
-// index of top-left x vel
-int particle_v1_index(particle_t *p) {
-  int v1_col = p->x1 / CELL_W;
-  int v1_row = p->x2 / CELL_H - 0.5;
-  return v1_row * (SIM_W + 1) + v1_col;
-}
-
-// index of top-left y vel
-int particle_v2_index(particle_t *p) {
-  int v2_col = p->x1 / CELL_W - 0.5;
-  int v2_row = p->x2 / CELL_H;
-  return v2_row * SIM_W + v2_col;
-}
-
-void coordinates_from_index(int index, int row_width, int *row, int *col) {
-  *row = index / row_width;
-  *col = index % row_width;
-}
-
-void position_in_v1_grid(particle_t *p, int row, int col, float *dx,
-                         float *dy) {
-  *dx = p->x1 - col * CELL_W;
-  *dy = p->x2 - (row + 0.5) * CELL_H;
-}
-
-void position_in_v2_grid(particle_t *p, int row, int col, float *dx,
-                         float *dy) {
-  *dx = p->x1 - (col + 0.5) * CELL_W;
-  *dy = p->x2 - row * CELL_H;
-}
-
-bool cell_on_edge(int i, int j) {
-  if (i == 0 || i == SIM_H - 1) {
-    return true;
-  }
-  if (j == 0 || j == SIM_W - 1) {
-    return true;
-  }
-  return false;
-}
-
-bool cell_is(int i, int j, state_e_t state) {
-  if (cell_in_bounds(i, j)) {
-    return s[i][j] == state;
-  }
-  return false;
-}
-
-void set_cell_at(particle_t particle, state_e_t state) {
-  int j = particle.x1 / CELL_W;
-  int i = particle.x2 / CELL_H;
-  if (cell_in_bounds(i, j)) {
-    s[i][j] = state;
-  }
-}
-
-bool particle_in(particle_t particle, state_e_t state) {
-  int j = particle.x1 / CELL_W;
-  int i = particle.x2 / CELL_H;
-  return cell_is(i, j, state); // check bounds to not lose particles
-}
-
-float particle_velocity(particle_t *p) { return hypot(p->v1, p->v2); }
-
 //=============
 //    MAIN
 //=============
@@ -219,20 +24,10 @@ float particle_velocity(particle_t *p) { return hypot(p->v1, p->v2); }
 void setup_scaling(SDL_Window *window, SDL_Renderer *renderer);
 
 void initialise();
-void set_state_half_water_box();
-void reset_velocity_field();
-void distribute_particles();
-int count_water_cells();
-void update_prior_velocities();
 
 void advection();
-
 void v_particles_to_grid();
-void add_v1_weight(int idx, float v, float w);
-void add_v2_weight(int idx, float v, float w);
-
 void projection(int iters);
-
 void v_grid_to_particles();
 
 void render_simulation(SDL_Renderer *renderer);
@@ -256,6 +51,8 @@ int main() {
   float update_time = 0.0;
   long long cycles = 0;
 
+  float sum_t1 = 0.f, sum_t2 = 0.f, sum_t3 = 0.f, sum_t4 = 0.f;
+
   initialise();
 
   while (running) {
@@ -274,10 +71,10 @@ int main() {
 
     // simulation code
 
-    advection();
-    v_particles_to_grid();
-    projection(k_iters);
-    v_grid_to_particles();
+    sum_t1 += time_of(advection());
+    sum_t2 += time_of(v_particles_to_grid());
+    sum_t3 += time_of(projection(k_iters));
+    sum_t4 += time_of(v_grid_to_particles());
 
     update_time += now() - t0;
 
@@ -295,7 +92,13 @@ int main() {
 
   printf("\n -- finished -- \n\n");
 
-  printf("time per cycle: %f ms\n\n", 1000.0 * update_time / cycles);
+  printf("time per cycle: %f ms\n", 1000.0 * update_time / cycles);
+  printf("   advect: %f ms\n", 1000.0 * sum_t1 / cycles);
+  printf("  to_grid: %f ms\n", 1000.0 * sum_t2 / cycles);
+  printf("  project: %f ms\n", 1000.0 * sum_t3 / cycles);
+  printf("  to_part: %f ms\n", 1000.0 * sum_t4 / cycles);
+
+  printf("\n");
 
   return 0;
 }
@@ -314,6 +117,12 @@ void setup_scaling(SDL_Window *w, SDL_Renderer *r) {
   SDL_SetRenderScale(r, scale, scale);
 }
 
+void set_state_half_water_box();
+void reset_velocity_field();
+void distribute_particles();
+int count_water_cells();
+void update_prior_velocities();
+
 void initialise() {
   set_state_half_water_box();
   distribute_particles();
@@ -325,19 +134,20 @@ void set_state_half_water_box() {
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
       if (cell_on_edge(i, j)) {
-        s[i][j] = solid_e;
+        states[i][j] = solid_e;
       } else if (j < SIM_W / 2) {
-        s[i][j] = water_e;
+        states[i][j] = water_e;
       } else {
-        s[i][j] = air_e;
+        states[i][j] = air_e;
       }
     }
   }
 }
 
 void distribute_particles() {
-  particles = malloc(n_particles * sizeof(particle_t));
   n_particles = PARTICLES_PER_CELL * count_water_cells();
+  particles = malloc(n_particles * sizeof(particle_t));
+  particle_weights = malloc(n_particles * 8 * sizeof(cell_weight_t));
 
   constexpr float x_gap = (float)CELL_W / DENSITY;
   constexpr float y_gap = (float)CELL_H / DENSITY;
@@ -373,7 +183,6 @@ int count_water_cells() {
   return res;
 }
 
-// TODO! use nan for cell boundaries not including water
 void reset_velocity_field() {
   for (int i = 0; i < V1N; ++i) {
     v1[i] = 0.f;
@@ -382,7 +191,7 @@ void reset_velocity_field() {
 
   for (int i = 0; i < V2N; ++i) {
     v2[i] = 0.f;
-    w1[i] = 1.f;
+    w2[i] = 1.f;
   }
 }
 
@@ -396,8 +205,8 @@ void advection() {
   // set fluid cells to air
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      if (s[i][j] != solid_e) {
-        s[i][j] = air_e;
+      if (states[i][j] != solid_e) {
+        states[i][j] = air_e;
       }
     }
   }
@@ -413,59 +222,38 @@ void advection() {
 
     particle_enforce_bounds(&particles[i]);
     // TODO? particles bounce off of walls with raycasting
-    for (int tries = 0; tries < 10 && particle_in(particles[i], solid_e);
+    for (int tries = 0; tries < 10 && particle_in(&particles[i], solid_e);
          ++tries) {
       particles[i].x1 -= dx1 / BACKTRACK_PRECISION;
       particles[i].x2 -= dx2 / BACKTRACK_PRECISION;
     }
-    set_cell_at(particles[i], water_e);
+    set_cell_at(&particles[i], water_e);
   }
 }
 
-typedef struct {
-  int idx;
-  float weight;
-} cell_weight_t;
+void compute_weights(particle_t *p, cell_weight_t *restrict v1_weights,
+                     cell_weight_t *restrict v2_weights);
+void add_v1_weight(cell_weight_t *cell, float v); // returns true if successful
+void add_v2_weight(cell_weight_t *cell, float v); // returns true if successful
+void enforce_solid_velocity_field() {}            // TODO!
 
 void v_particles_to_grid() {
   particle_t *p = particles;
   reset_velocity_field();
   for (int i = 0; i < n_particles; ++i) {
-    int v1_i = particle_v1_index(&p[i]); // index of top-left x vel
-    int v2_i = particle_v2_index(&p[i]); // index of top-left y vel
-
-    int v1_row, v1_col, v2_row, v2_col;
-    coordinates_from_index(v1_i, SIM_W + 1, &v1_row, &v1_col);
-    coordinates_from_index(v2_i, SIM_W, &v2_row, &v2_col);
-
-    // x velocities: no change on x, staggered upwards by CELL_H / 2
-    // y velocities: no change on y, staggered left by CELL_W / 2
-    float v1_dx, v1_dy, v2_dx, v2_dy;
-    position_in_v1_grid(&p[i], v1_row, v1_col, &v1_dx, &v1_dy);
-    position_in_v2_grid(&p[i], v2_row, v2_col, &v2_dx, &v2_dy);
-
-    // clang-format off
-    cell_weight_t v1_weights[4] = {
-        {v1_i                  , v1_dx            * v1_dy           },
-        {v1_i + (SIM_W + 1)    , v1_dx            * (CELL_H - v1_dy)},
-        {v1_i               + 1, (CELL_W - v1_dx) * v1_dy           },
-        {v1_i + (SIM_W + 1) + 1, (CELL_W - v1_dx) * (CELL_H - v1_dy)}};
-
-    cell_weight_t v2_weights[4] = {
-        {v2_i            ,           v2_dx  *           v2_dy },
-        {v2_i + SIM_W    ,           v2_dx  * (CELL_H - v2_dy)},
-        {v2_i         + 1, (CELL_W - v2_dx) *           v2_dy },
-        {v2_i + SIM_W + 1, (CELL_W - v2_dx) * (CELL_H - v2_dy)}};
-    // clang-format on
-
-    // add weights
-    for (int i = 0; i < 4; ++i) {
-      add_v1_weight(v1_weights[i].idx, p[i].v1, v1_weights[i].weight);
-      add_v2_weight(v2_weights[i].idx, p[i].v2, v2_weights[i].weight);
-    }
-
     // somehow this looped list pairing thing is faster by 0.1 ms and easier to
     // read. vectorization? i don't even know
+
+    compute_weights(&p[i], &particle_weights[8 * i],
+                    &particle_weights[8 * i + 4]);
+
+    // add weights
+    for (int j = 0; j < 4; ++j) {
+      cell_weight_t *v1_w = &particle_weights[8 * i + j];
+      cell_weight_t *v2_w = &particle_weights[8 * i + 4 + j];
+      add_v1_weight(v1_w, p[i].v1);
+      add_v2_weight(v2_w, p[i].v2);
+    }
   }
 
   for (int i = 0; i < V1N; ++i) {
@@ -477,59 +265,110 @@ void v_particles_to_grid() {
       v2[i] /= w2[i];
   }
 
+  enforce_solid_velocity_field();
   update_prior_velocities();
 }
 
-void add_v1_weight(int idx, float v, float w) {
-  if (!in_rangei(idx, 0, V1N))
-    return;
+void compute_weights(particle_t *p, cell_weight_t *restrict v1_weights,
+                     cell_weight_t *restrict v2_weights) {
+  int v1_i = particle_v1_index(p); // index of top-left x vel
+  int v2_i = particle_v2_index(p); // index of top-left y vel
 
-  int i = idx / (SIM_W + 1);
-  int j = idx % (SIM_W + 1);
+  int v1_row, v1_col, v2_row, v2_col;
+  coordinates_from_index(v1_i, SIM_W + 1, &v1_row, &v1_col);
+  coordinates_from_index(v2_i, SIM_W, &v2_row, &v2_col);
+
+  // x velocities: no change on x, staggered upwards by CELL_H / 2
+  // y velocities: no change on y, staggered left by CELL_W / 2
+  float v1_dx, v1_dy, v2_dx, v2_dy;
+  position_in_v1_grid(p, v1_row, v1_col, &v1_dx, &v1_dy);
+  position_in_v2_grid(p, v2_row, v2_col, &v2_dx, &v2_dy);
+
+  // clang-format off
+  v1_weights[0] = (cell_weight_t){v1_i                  , v1_dx            * v1_dy           };
+  v1_weights[1] = (cell_weight_t){v1_i + (SIM_W + 1)    , v1_dx            * (CELL_H - v1_dy)};
+  v1_weights[2] = (cell_weight_t){v1_i               + 1, (CELL_W - v1_dx) * v1_dy           };
+  v1_weights[3] = (cell_weight_t){v1_i + (SIM_W + 1) + 1, (CELL_W - v1_dx) * (CELL_H - v1_dy)};
+
+  v2_weights[0] = (cell_weight_t){v2_i            ,           v2_dx  *           v2_dy };
+  v2_weights[1] = (cell_weight_t){v2_i + SIM_W    ,           v2_dx  * (CELL_H - v2_dy)};
+  v2_weights[2] = (cell_weight_t){v2_i         + 1, (CELL_W - v2_dx) *           v2_dy };
+  v2_weights[3] = (cell_weight_t){v2_i + SIM_W + 1, (CELL_W - v2_dx) * (CELL_H - v2_dy)};
+  // clang-format on
+}
+
+void add_v1_weight(cell_weight_t *cell, float v) {
+  if (!in_rangei(cell->idx, 0, V1N)) {
+    cell->weight = 0.f;
+    return;
+  }
+
+  int i = cell->idx / (SIM_W + 1);
+  int j = cell->idx % (SIM_W + 1);
 
   bool v1_is_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
-  if (v1_is_water) {
-    v1[idx] += w * v;
-    w1[idx] += w;
+  bool v1_touches_solid = cell_is(i, j - 1, solid_e) || cell_is(i, j, solid_e);
+  if (v1_is_water && !v1_touches_solid) {
+    v1[cell->idx] += cell->weight * v;
+    w1[cell->idx] += cell->weight;
+  } else if (v1_touches_solid) {
+    v1[cell->idx] = 0.f;
+    w1[cell->idx] = 0.f;
+    cell->weight = 0.f;
   } else {
-    v1[idx] = NAN;
-    w1[idx] = 0;
+    v1[cell->idx] = NAN;
+    w1[cell->idx] = 0.f;
+    cell->weight = 0.f;
   }
 }
 
-void add_v2_weight(int idx, float v, float w) {
-  if (!in_rangei(idx, 0, V2N))
+void add_v2_weight(cell_weight_t *cell, float v) {
+  if (!in_rangei(cell->idx, 0, V2N)) {
+    cell->weight = 0.f;
     return;
+  }
 
-  int i = idx / SIM_W;
-  int j = idx % SIM_W;
+  int i = cell->idx / SIM_W;
+  int j = cell->idx % SIM_W;
 
   bool v2_is_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
-  if (v2_is_water) {
-    v2[idx] += w * v;
-    w2[idx] += w;
+  bool v2_touches_solid = cell_is(i - 1, j, solid_e) || cell_is(i, j, solid_e);
+  if (v2_is_water && !v2_touches_solid) {
+    v2[cell->idx] += cell->weight * v;
+    w2[cell->idx] += cell->weight;
+  } else if (v2_touches_solid) {
+    v2[cell->idx] = 0.f;
+    w2[cell->idx] = 0.f;
+    cell->weight = 0.f;
   } else {
-    v2[idx] = NAN;
-    w2[idx] = 0;
+    v2[cell->idx] = NAN;
+    w2[cell->idx] = 0.f;
+    cell->weight = 0.f;
   }
 }
 
 void projection(int iters) {
-  // TODO! check nan cells are done correctly (PROBABLY NOT)
+  // TODO! fix bug with insufficient x impulse
+  //       ! why does x velocity after projection become negative
+  //       ! make sure this is done by november
+  // TODO! fix bug with y velocities being nonzero at the bottom... this cannot
+  // happen
+  // TODO! fix particle lagging in the air, check its velocity field
   // TODO: compensate for high density areas
   // TODO? do you handle incompressibility including air/water boundaries?
+  // enforce inflow = outflow iteratively
   for (int n = 0; n < iters; ++n) {
     for (int i = 1; i < SIM_H - 1; ++i) {
       for (int j = 1; j < SIM_W - 1; ++j) {
-        if (!cell_is(i, j, water_e))
+        if (states[i][j] != water_e)
           continue;
 
-        bool sl = s[i][j - 1] == water_e;
-        bool sr = s[i][j + 1] == water_e;
-        bool su = s[i - 1][j] == water_e;
-        bool sd = s[i + 1][j] == water_e;
-        float s = sl + sr + su + sd;
-        if (sl + sr + su + sd == 0) {
+        bool sl = states[i][j - 1] != solid_e;
+        bool sr = states[i][j + 1] != solid_e;
+        bool su = states[i - 1][j] != solid_e;
+        bool sd = states[i + 1][j] != solid_e;
+        int s = sl + sr + su + sd;
+        if (!s) {
           continue;
         }
 
@@ -541,18 +380,93 @@ void projection(int iters) {
         float *vu = &v2[v2_i];
         float *vd = &v2[v2_i + SIM_W];
 
-        float flow = k_relax * (-*vl + *vr + -*vu + *vd);
+        float net = (*vr + *vd - *vl - *vu);
+        float flow = k_relax * net / s;
 
-        *vl += flow * (sl / s);
-        *vr -= flow * (sr / s);
-        *vu += flow * (su / s);
-        *vd -= flow * (sd / s);
+        *vl += sl * flow;
+        *vr -= sr * flow;
+        *vu += su * flow;
+        *vd -= sd * flow;
+      }
+    }
+  }
+  // assign velocities between non-water cells to nan
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W + 1; ++j) {
+      bool borders_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
+      if (!borders_water) {
+        v1[i * (SIM_W + 1) + j] = NAN;
+      }
+    }
+  }
+
+  for (int i = 0; i < SIM_H + 1; ++i) {
+    for (int j = 0; j < SIM_W; ++j) {
+      bool borders_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
+      if (!borders_water) {
+        v2[i * SIM_W + j] = NAN;
       }
     }
   }
 }
 
-void v_grid_to_particles() {}
+void v_grid_to_particles() {
+  bool pic = false;
+
+  for (int i = 0; i < n_particles; ++i) {
+    float particle_v = 0.f;
+    float weight_sum = 0.f;
+    bool influenced = false;
+    for (int j = 0; j < 4; ++j) {
+      cell_weight_t *cell_weight = &particle_weights[8 * i + j];
+      int idx = cell_weight->idx;
+      float weight = cell_weight->weight;
+      if (idx >= 0 && weight != 0.f && isfinite(v1[idx])) {
+        influenced = true;
+        if (pic) {
+          particle_v += v1[idx] * weight;
+        } else {
+          particle_v += (v1[idx] - v1_prior[idx]) * weight;
+        }
+        weight_sum += weight;
+      }
+    }
+    // if (influenced)
+    if (pic) {
+      particles[i].v1 = particle_v / weight_sum;
+    } else {
+      particles[i].v1 += particle_v / weight_sum;
+    }
+
+    particle_v = 0.f;
+    weight_sum = 0.f;
+    influenced = false;
+    for (int j = 0; j < 4; ++j) {
+      cell_weight_t *cell_weight = &particle_weights[8 * i + 4 + j];
+      int idx = cell_weight->idx;
+      float weight = cell_weight->weight;
+      if (idx >= 0 && weight != 0.f && isfinite(v2[idx])) {
+        influenced = true;
+        if (pic) {
+          particle_v += v2[idx] * weight;
+        } else {
+          particle_v += (v2[idx] - v2_prior[idx]) * weight;
+        }
+        weight_sum += weight;
+      }
+    }
+    // if (influenced)
+    if (pic) {
+      particles[i].v2 = particle_v / weight_sum;
+    } else {
+      particles[i].v2 += particle_v / weight_sum;
+    }
+  }
+}
+
+// what is up with this velocity field
+void render_particles(SDL_Renderer* renderer);
+void render_velocity_field(SDL_Renderer *renderer);
 
 void render_simulation(SDL_Renderer *renderer) {
   // draw cells
@@ -564,7 +478,7 @@ void render_simulation(SDL_Renderer *renderer) {
     for (int j = 0; j < SIM_W; ++j) {
       SDL_FRect rect = {
           .x = CELL_W * j, .y = CELL_H * i, .w = CELL_W, .h = CELL_H};
-      switch (s[i][j]) {
+      switch (states[i][j]) {
       case water_e:
         SDL_SetRenderDrawColor(renderer, c_fluid.r, c_fluid.g, c_fluid.b,
                                SDL_ALPHA_OPAQUE);
@@ -581,10 +495,36 @@ void render_simulation(SDL_Renderer *renderer) {
       SDL_RenderFillRect(renderer, &rect);
     }
   }
-  // draw particles
+  
+  render_particles(renderer);
+  // render_velocity_field(renderer);
+}
+
+void render_particles(SDL_Renderer *renderer) {
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
   for (int i = 0; i < n_particles; ++i) {
     particle_t p = particles[i];
     SDL_RenderPoint(renderer, p.x1, p.x2);
+  }
+}
+
+void render_velocity_field(SDL_Renderer *renderer) {
+  SDL_SetRenderDrawColor(renderer, 180, 255, 0, SDL_ALPHA_OPAQUE);
+  // render x velocities
+  for (int i = 0; i < V1N; ++i) {
+    int row = 0;
+    int col = 0;
+    coordinates_from_index(i, SIM_W + 1, &row, &col);
+    int origin_x = col * CELL_W;
+    int origin_y = (row + 0.5) * CELL_H;
+    SDL_RenderLine(renderer, origin_x, origin_y, origin_x + v1[i], origin_y);
+  }
+  // render y velocities
+  for (int i = 0; i < V2N; ++i) {
+    int row = 0, col = 0;
+    coordinates_from_index(i, SIM_W, &row, &col);
+    int origin_x = (col + 0.5) * CELL_W;
+    int origin_y = row * CELL_H;
+    SDL_RenderLine(renderer, origin_x, origin_y, origin_x, origin_y + v2[i]);
   }
 }
