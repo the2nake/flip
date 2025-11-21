@@ -231,8 +231,7 @@ void advection() {
   }
 }
 
-void compute_weights(particle_t *p, cell_weight_t *restrict v1_w,
-                     cell_weight_t *restrict v2_w);
+void compute_weights(particle_t *p, cell_weight_t *w);
 void add_v1_weight(cell_weight_t *cell, float v); // returns true if successful
 void add_v2_weight(cell_weight_t *cell, float v); // returns true if successful
 void enforce_solid_velocity_field() {}            // TODO!
@@ -244,7 +243,7 @@ void v_particles_to_grid() {
     // somehow this looped list pairing thing is faster by 0.1 ms and easier to
     // read. vectorization? i don't even know
 
-    compute_weights(&p[i], &particles_w[8 * i], &particles_w[8 * i + 4]);
+    compute_weights(&p[i], &particles_w[8 * i]);
 
     // store weights
     for (int j = 0; j < 4; ++j) {
@@ -268,8 +267,7 @@ void v_particles_to_grid() {
   update_prior_velocities();
 }
 
-void compute_weights(particle_t *p, cell_weight_t *restrict v1_w,
-                     cell_weight_t *restrict v2_w) {
+void compute_weights(particle_t *p, cell_weight_t *w) {
   int v1_i = particle_v1_index(p); // index of top-left x vel
   int v2_i = particle_v2_index(p); // index of top-left y vel
 
@@ -284,15 +282,15 @@ void compute_weights(particle_t *p, cell_weight_t *restrict v1_w,
   position_in_v2_grid(p, v2_row, v2_col, &v2_dx, &v2_dy);
 
   // clang-format off
-  v1_w[0] = (cell_weight_t){v1_i                  , v1_dx            * v1_dy           };
-  v1_w[1] = (cell_weight_t){v1_i + (SIM_W + 1)    , v1_dx            * (CELL_H - v1_dy)};
-  v1_w[2] = (cell_weight_t){v1_i               + 1, (CELL_W - v1_dx) * v1_dy           };
-  v1_w[3] = (cell_weight_t){v1_i + (SIM_W + 1) + 1, (CELL_W - v1_dx) * (CELL_H - v1_dy)};
+  w[0] = (cell_weight_t){v1_i                  , v1_dx            * v1_dy           };
+  w[1] = (cell_weight_t){v1_i + (SIM_W + 1)    , v1_dx            * (CELL_H - v1_dy)};
+  w[2] = (cell_weight_t){v1_i               + 1, (CELL_W - v1_dx) * v1_dy           };
+  w[3] = (cell_weight_t){v1_i + (SIM_W + 1) + 1, (CELL_W - v1_dx) * (CELL_H - v1_dy)};
 
-  v2_w[0] = (cell_weight_t){v2_i            ,           v2_dx  *           v2_dy };
-  v2_w[1] = (cell_weight_t){v2_i + SIM_W    ,           v2_dx  * (CELL_H - v2_dy)};
-  v2_w[2] = (cell_weight_t){v2_i         + 1, (CELL_W - v2_dx) *           v2_dy };
-  v2_w[3] = (cell_weight_t){v2_i + SIM_W + 1, (CELL_W - v2_dx) * (CELL_H - v2_dy)};
+  w[4] = (cell_weight_t){v2_i            ,           v2_dx  *           v2_dy };
+  w[5] = (cell_weight_t){v2_i + SIM_W    ,           v2_dx  * (CELL_H - v2_dy)};
+  w[6] = (cell_weight_t){v2_i         + 1, (CELL_W - v2_dx) *           v2_dy };
+  w[7] = (cell_weight_t){v2_i + SIM_W + 1, (CELL_W - v2_dx) * (CELL_H - v2_dy)};
   // clang-format on
 }
 
