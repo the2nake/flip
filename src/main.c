@@ -416,13 +416,11 @@ void v_grid_to_particles() {
   for (int i = 0; i < n_particles; ++i) {
     float particle_v = 0.f;
     float weight_sum = 0.f;
-    bool influenced = false;
     for (int j = 0; j < 4; ++j) {
       cell_weight_t *cell_weight = &particle_weights[8 * i + j];
       int idx = cell_weight->idx;
       float weight = cell_weight->weight;
       if (idx >= 0 && weight != 0.f && isfinite(v1[idx])) {
-        influenced = true;
         if (pic) {
           particle_v += v1[idx] * weight;
         } else {
@@ -431,7 +429,6 @@ void v_grid_to_particles() {
         weight_sum += weight;
       }
     }
-    // if (influenced)
     if (pic) {
       particles[i].v1 = particle_v / weight_sum;
     } else {
@@ -440,13 +437,11 @@ void v_grid_to_particles() {
 
     particle_v = 0.f;
     weight_sum = 0.f;
-    influenced = false;
     for (int j = 0; j < 4; ++j) {
       cell_weight_t *cell_weight = &particle_weights[8 * i + 4 + j];
       int idx = cell_weight->idx;
       float weight = cell_weight->weight;
       if (idx >= 0 && weight != 0.f && isfinite(v2[idx])) {
-        influenced = true;
         if (pic) {
           particle_v += v2[idx] * weight;
         } else {
@@ -455,7 +450,6 @@ void v_grid_to_particles() {
         weight_sum += weight;
       }
     }
-    // if (influenced)
     if (pic) {
       particles[i].v2 = particle_v / weight_sum;
     } else {
@@ -465,7 +459,7 @@ void v_grid_to_particles() {
 }
 
 // what is up with this velocity field
-void render_particles(SDL_Renderer* renderer);
+void render_particles(SDL_Renderer *renderer);
 void render_velocity_field(SDL_Renderer *renderer);
 
 void render_simulation(SDL_Renderer *renderer) {
@@ -495,7 +489,7 @@ void render_simulation(SDL_Renderer *renderer) {
       SDL_RenderFillRect(renderer, &rect);
     }
   }
-  
+
   render_particles(renderer);
   // render_velocity_field(renderer);
 }
