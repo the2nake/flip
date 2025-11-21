@@ -415,43 +415,48 @@ void update_particle(int i, field_e_t field, bool pic) {
   *v_out = dv / w + (pic ? 0.f : *v_out);
 }
 
+void render_cells(SDL_Renderer *renderer);
 void render_particles(SDL_Renderer *renderer);
 void render_velocities(SDL_Renderer *renderer);
 
 void render_simulation(SDL_Renderer *renderer) {
-  // draw cells
-  const SDL_Color c_wall = {155, 155, 155};
-  const SDL_Color c_fluid = {200, 220, 255};
-  const SDL_Color c_air = {255, 255, 255};
+  render_cells(renderer);
+  render_particles(renderer);
+  // render_velocities(renderer);
+}
+
+void set_color(SDL_Renderer *renderer, const SDL_Color *color) {
+  SDL_SetRenderDrawColor(renderer, color->r, color->g, color->b, color->a);
+}
+
+void render_cells(SDL_Renderer *renderer) {
+  // clang-format off
+  const SDL_Color c_wall  = {155, 155, 155, SDL_ALPHA_OPAQUE};
+  const SDL_Color c_fluid = {200, 220, 255, SDL_ALPHA_OPAQUE};
+  const SDL_Color c_air   = {255, 255, 255, SDL_ALPHA_OPAQUE};
+  // clang-format on
 
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      SDL_FRect rect = {
-          .x = CELL_W * j, .y = CELL_H * i, .w = CELL_W, .h = CELL_H};
+      SDL_FRect rect = {CELL_W * j, CELL_H * i, CELL_W, CELL_H};
       switch (states[i][j]) {
       case water_e:
-        SDL_SetRenderDrawColor(renderer, c_fluid.r, c_fluid.g, c_fluid.b,
-                               SDL_ALPHA_OPAQUE);
+        set_color(renderer, &c_fluid);
         break;
       case solid_e:
-        SDL_SetRenderDrawColor(renderer, c_wall.r, c_wall.g, c_wall.b,
-                               SDL_ALPHA_OPAQUE);
+        set_color(renderer, &c_wall);
         break;
       case air_e:
-        SDL_SetRenderDrawColor(renderer, c_air.r, c_air.g, c_air.b,
-                               SDL_ALPHA_OPAQUE);
+        set_color(renderer, &c_air);
         break;
       }
       SDL_RenderFillRect(renderer, &rect);
     }
   }
-
-  render_particles(renderer);
-  // render_velocity_field(renderer);
 }
 
 void render_particles(SDL_Renderer *renderer) {
-  SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+  set_color(renderer, &(SDL_Color){4, 2, 0, SDL_ALPHA_OPAQUE});
   for (int i = 0; i < n_particles; ++i) {
     particle_t p = particles[i];
     SDL_RenderPoint(renderer, p.x1, p.x2);
@@ -459,22 +464,24 @@ void render_particles(SDL_Renderer *renderer) {
 }
 
 void render_velocities(SDL_Renderer *renderer) {
-  SDL_SetRenderDrawColor(renderer, 180, 255, 0, SDL_ALPHA_OPAQUE);
-  // render x velocities
+  const float scale = 0.5;
+  set_color(renderer, &(SDL_Color){180, 255, 0, SDL_ALPHA_OPAQUE});
+
+  // x velocities
   for (int i = 0; i < V1N; ++i) {
-    int row = 0;
-    int col = 0;
+    int row = 0, col = 0;
     coordinates_from_index(i, SIM_W + 1, &row, &col);
-    int origin_x = col * CELL_W;
-    int origin_y = (row + 0.5) * CELL_H;
-    SDL_RenderLine(renderer, origin_x, origin_y, origin_x + v1[i], origin_y);
+    int x = col * CELL_W;
+    int y = (row + 0.5) * CELL_H;
+    SDL_RenderLine(renderer, x, y, x + v1[i] * scale, y);
   }
-  // render y velocities
+
+  // y velocities
   for (int i = 0; i < V2N; ++i) {
     int row = 0, col = 0;
     coordinates_from_index(i, SIM_W, &row, &col);
-    int origin_x = (col + 0.5) * CELL_W;
-    int origin_y = row * CELL_H;
-    SDL_RenderLine(renderer, origin_x, origin_y, origin_x, origin_y + v2[i]);
+    int mid_x = (col + 0.5) * CELL_W;
+    int mid_y = row * CELL_H;
+    SDL_RenderLine(renderer, mid_x, mid_y, mid_x, mid_y + v2[i] * scale);
   }
 }
