@@ -50,8 +50,8 @@ extern float v1_prior[V1N];
 extern float v2_prior[V1N];
 
 typedef struct {
-  int idx;
-  float weight;
+  int i;
+  float w;
 } cell_weight_t;
 
 extern particle_t *particles;

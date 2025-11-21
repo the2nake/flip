@@ -297,52 +297,52 @@ void compute_weights(particle_t *p, cell_weight_t *restrict v1_weights,
 }
 
 void add_v1_weight(cell_weight_t *cell, float v) {
-  if (!in_rangei(cell->idx, 0, V1N)) {
-    cell->weight = 0.f;
+  if (!in_rangei(cell->i, 0, V1N)) {
+    cell->w = 0.f;
     return;
   }
 
-  int i = cell->idx / (SIM_W + 1);
-  int j = cell->idx % (SIM_W + 1);
+  int i = cell->i / (SIM_W + 1);
+  int j = cell->i % (SIM_W + 1);
 
   bool v1_is_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
   bool v1_touches_solid = cell_is(i, j - 1, solid_e) || cell_is(i, j, solid_e);
   if (v1_is_water && !v1_touches_solid) {
-    v1[cell->idx] += cell->weight * v;
-    w1[cell->idx] += cell->weight;
+    v1[cell->i] += cell->w * v;
+    w1[cell->i] += cell->w;
   } else if (v1_touches_solid) {
-    v1[cell->idx] = 0.f;
-    w1[cell->idx] = 0.f;
-    cell->weight = 0.f;
+    v1[cell->i] = 0.f;
+    w1[cell->i] = 0.f;
+    cell->w = 0.f;
   } else {
-    v1[cell->idx] = NAN;
-    w1[cell->idx] = 0.f;
-    cell->weight = 0.f;
+    v1[cell->i] = NAN;
+    w1[cell->i] = 0.f;
+    cell->w = 0.f;
   }
 }
 
 void add_v2_weight(cell_weight_t *cell, float v) {
-  if (!in_rangei(cell->idx, 0, V2N)) {
-    cell->weight = 0.f;
+  if (!in_rangei(cell->i, 0, V2N)) {
+    cell->w = 0.f;
     return;
   }
 
-  int i = cell->idx / SIM_W;
-  int j = cell->idx % SIM_W;
+  int i = cell->i / SIM_W;
+  int j = cell->i % SIM_W;
 
   bool v2_is_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
   bool v2_touches_solid = cell_is(i - 1, j, solid_e) || cell_is(i, j, solid_e);
   if (v2_is_water && !v2_touches_solid) {
-    v2[cell->idx] += cell->weight * v;
-    w2[cell->idx] += cell->weight;
+    v2[cell->i] += cell->w * v;
+    w2[cell->i] += cell->w;
   } else if (v2_touches_solid) {
-    v2[cell->idx] = 0.f;
-    w2[cell->idx] = 0.f;
-    cell->weight = 0.f;
+    v2[cell->i] = 0.f;
+    w2[cell->i] = 0.f;
+    cell->w = 0.f;
   } else {
-    v2[cell->idx] = NAN;
-    w2[cell->idx] = 0.f;
-    cell->weight = 0.f;
+    v2[cell->i] = NAN;
+    w2[cell->i] = 0.f;
+    cell->w = 0.f;
   }
 }
 
@@ -403,46 +403,39 @@ void projection(int iters) {
   }
 }
 
+typedef enum { v1_e, v2_e } field_e_t;
+
+void update_particle(int i, bool pic, field_e_t field) {
+  assert(0 <= i && i < n_particles);
+
+  // clang-format off
+  cell_weight_t *c = &particles_w[8 * i + (field == v2_e) * 4];
+  float *v         = field == v1_e ? v1               : v2;
+  float *v_prior   = field == v1_e ? v1_prior         : v2_prior;
+  float *v_out     = field == v1_e ? &particles[i].v1 : &particles[i].v2;
+  // clang-format on
+
+  float dv = 0.f;
+  float w = 0.f;
+
+  for (int j = 0; j < 4; ++j, ++c) {
+    if (c->i < 0 || !c->w || !isfinite(v[c->i]))
+      continue;
+
+    float change = v[c->i] - (pic ? 0.f : v_prior[c->i]);
+    dv += change * c->w;
+    w += c->w;
+  }
+
+  *v_out = dv / w + (pic ? 0.f : *v_out);
+}
+
 void v_grid_to_particles() {
   bool pic = false;
 
   for (int i = 0; i < n_particles; ++i) {
-    float v = 0.f;
-    float w = 0.f;
-
-    for (int j = 0; j < 4; ++j) {
-      cell_weight_t *cell_weight = &particles_w[8 * i + j];
-
-      int cell_i = cell_weight->idx;
-      float cell_w = cell_weight->weight;
-
-      // isfinite handles nan as well, don't use isinf
-      if (cell_i < 0 || !cell_w || !isfinite(v1[cell_i]))
-        continue;
-
-      float delta_v = v1[cell_i] - (pic ? 0 : v1_prior[cell_i]);
-      v += delta_v * cell_w;
-      w += cell_w;
-    }
-    particles[i].v1 = v / w + (pic ? 0 : particles[i].v1);
-
-    v = 0.f;
-    w = 0.f;
-
-    for (int j = 0; j < 4; ++j) {
-      cell_weight_t *cell_weight = &particles_w[8 * i + 4 + j];
-      int cell_i = cell_weight->idx;
-      float cell_w = cell_weight->weight;
-
-      // isfinite handles nan as well, don't use isinf
-      if (cell_i < 0 || !cell_w || !isfinite(v2[cell_i]))
-        continue;
-
-      float delta_v = v2[cell_i] - (pic ? 0 : v2_prior[cell_i]);
-      v += delta_v * cell_w;
-      w += cell_w;
-    }
-    particles[i].v2 = v / w + (pic ? 0 : particles[i].v2);
+    update_particle(i, pic, v1_e);
+    update_particle(i, pic, v2_e);
   }
 }
 
