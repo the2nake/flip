@@ -30,6 +30,7 @@ extern const float k_relax;
 constexpr int k_iters = 40;
 
 typedef enum { solid_e = 0, water_e = 1, air_e = 2 } state_e_t;
+typedef enum { v1_e, v2_e } field_e_t;
 
 typedef struct {
   float x1; // x position

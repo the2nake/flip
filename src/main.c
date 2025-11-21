@@ -232,9 +232,9 @@ void advection() {
 }
 
 void compute_weights(particle_t *p, cell_weight_t *w);
-void add_v1_weight(cell_weight_t *cell, float v); // returns true if successful
-void add_v2_weight(cell_weight_t *cell, float v); // returns true if successful
-void enforce_solid_velocity_field() {}            // TODO!
+void add_weight(field_e_t field, cell_weight_t *cell, float v);
+void enforce_solid_velocity_field() {
+} // TODO! make sure solid block-caused velocities are not overridden
 
 void v_particles_to_grid() {
   particle_t *p = particles;
@@ -245,12 +245,9 @@ void v_particles_to_grid() {
 
     compute_weights(&p[i], &particles_w[8 * i]);
 
-    // store weights
     for (int j = 0; j < 4; ++j) {
-      cell_weight_t *v1_w = &particles_w[8 * i + j];
-      cell_weight_t *v2_w = &particles_w[8 * i + 4 + j];
-      add_v1_weight(v1_w, p[i].v1);
-      add_v2_weight(v2_w, p[i].v2);
+      add_weight(v1_e, &particles_w[8 * i + j], p[i].v1);
+      add_weight(v2_e, &particles_w[8 * i + j + 4], p[i].v2);
     }
   }
 
@@ -294,44 +291,33 @@ void compute_weights(particle_t *p, cell_weight_t *w) {
   // clang-format on
 }
 
-void add_v1_weight(cell_weight_t *c, float v) {
-  if (!in_rangei(c->i, 0, V1N)) {
+void add_weight(field_e_t field, cell_weight_t *c, float v) {
+  if (!in_rangei(c->i, 0, field == v1_e ? V1N : V2N)) {
     c->w = 0.f;
     return;
   }
 
-  int i = c->i / (SIM_W + 1);
-  int j = c->i % (SIM_W + 1);
+  float *vf = field == v1_e ? v1 : v2;
+  float *wf = field == v1_e ? w1 : w2;
+  int i = c->i / (SIM_W + (field == v1_e));
+  int j = c->i % (SIM_W + (field == v1_e));
 
-  bool v1_is_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
-  bool v1_touches_solid = cell_is(i, j - 1, solid_e) || cell_is(i, j, solid_e);
-  if (v1_is_water && !v1_touches_solid) {
-    v1[c->i] += c->w * v;
-    w1[c->i] += c->w;
+  bool is_water, touches_solid;
+
+  if (field == v1_e) {
+    is_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
+    touches_solid = cell_is(i, j - 1, solid_e) || cell_is(i, j, solid_e);
   } else {
-    v1[c->i] = v1_touches_solid ? 0.f : NAN;
-    w1[c->i] = 0.f;
-    c->w = 0.f;
-  }
-}
-
-void add_v2_weight(cell_weight_t *c, float v) {
-  if (!in_rangei(c->i, 0, V2N)) {
-    c->w = 0.f;
-    return;
+    is_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
+    touches_solid = cell_is(i - 1, j, solid_e) || cell_is(i, j, solid_e);
   }
 
-  int i = c->i / SIM_W;
-  int j = c->i % SIM_W;
-
-  bool v2_is_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
-  bool v2_touches_solid = cell_is(i - 1, j, solid_e) || cell_is(i, j, solid_e);
-  if (v2_is_water && !v2_touches_solid) {
-    v2[c->i] += c->w * v;
-    w2[c->i] += c->w;
+  if (is_water && !touches_solid) {
+    vf[c->i] += c->w * v;
+    wf[c->i] += c->w;
   } else {
-    v2[c->i] = v2_touches_solid ? 0.f : NAN;
-    w2[c->i] = 0.f;
+    vf[c->i] = touches_solid ? 0.f : NAN;
+    wf[c->i] = 0.f;
     c->w = 0.f;
   }
 }
@@ -392,8 +378,6 @@ void projection(int iters) {
     }
   }
 }
-
-typedef enum { v1_e, v2_e } field_e_t;
 
 void update_particle(int i, field_e_t field, bool pic);
 
