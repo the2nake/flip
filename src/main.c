@@ -147,7 +147,7 @@ void set_state_half_water_box() {
 void distribute_particles() {
   n_particles = PARTICLES_PER_CELL * count_water_cells();
   particles = malloc(n_particles * sizeof(particle_t));
-  particle_weights = malloc(n_particles * 8 * sizeof(cell_weight_t));
+  particles_w = malloc(n_particles * 8 * sizeof(cell_weight_t));
 
   constexpr float x_gap = (float)CELL_W / DENSITY;
   constexpr float y_gap = (float)CELL_H / DENSITY;
@@ -244,13 +244,12 @@ void v_particles_to_grid() {
     // somehow this looped list pairing thing is faster by 0.1 ms and easier to
     // read. vectorization? i don't even know
 
-    compute_weights(&p[i], &particle_weights[8 * i],
-                    &particle_weights[8 * i + 4]);
+    compute_weights(&p[i], &particles_w[8 * i], &particles_w[8 * i + 4]);
 
-    // add weights
+    // store weights
     for (int j = 0; j < 4; ++j) {
-      cell_weight_t *v1_w = &particle_weights[8 * i + j];
-      cell_weight_t *v2_w = &particle_weights[8 * i + 4 + j];
+      cell_weight_t *v1_w = &particles_w[8 * i + j];
+      cell_weight_t *v2_w = &particles_w[8 * i + 4 + j];
       add_v1_weight(v1_w, p[i].v1);
       add_v2_weight(v2_w, p[i].v2);
     }
@@ -347,16 +346,10 @@ void add_v2_weight(cell_weight_t *cell, float v) {
   }
 }
 
+// enforce inflow = outflow iteratively
 void projection(int iters) {
-  // TODO! fix bug with insufficient x impulse
-  //       ! why does x velocity after projection become negative
-  //       ! make sure this is done by november
-  // TODO! fix bug with y velocities being nonzero at the bottom... this cannot
-  // happen
   // TODO! fix particle lagging in the air, check its velocity field
   // TODO: compensate for high density areas
-  // TODO? do you handle incompressibility including air/water boundaries?
-  // enforce inflow = outflow iteratively
   for (int n = 0; n < iters; ++n) {
     for (int i = 1; i < SIM_H - 1; ++i) {
       for (int j = 1; j < SIM_W - 1; ++j) {
@@ -414,47 +407,42 @@ void v_grid_to_particles() {
   bool pic = false;
 
   for (int i = 0; i < n_particles; ++i) {
-    float particle_v = 0.f;
-    float weight_sum = 0.f;
-    for (int j = 0; j < 4; ++j) {
-      cell_weight_t *cell_weight = &particle_weights[8 * i + j];
-      int idx = cell_weight->idx;
-      float weight = cell_weight->weight;
-      if (idx >= 0 && weight != 0.f && isfinite(v1[idx])) {
-        if (pic) {
-          particle_v += v1[idx] * weight;
-        } else {
-          particle_v += (v1[idx] - v1_prior[idx]) * weight;
-        }
-        weight_sum += weight;
-      }
-    }
-    if (pic) {
-      particles[i].v1 = particle_v / weight_sum;
-    } else {
-      particles[i].v1 += particle_v / weight_sum;
-    }
+    float v = 0.f;
+    float w = 0.f;
 
-    particle_v = 0.f;
-    weight_sum = 0.f;
     for (int j = 0; j < 4; ++j) {
-      cell_weight_t *cell_weight = &particle_weights[8 * i + 4 + j];
-      int idx = cell_weight->idx;
-      float weight = cell_weight->weight;
-      if (idx >= 0 && weight != 0.f && isfinite(v2[idx])) {
-        if (pic) {
-          particle_v += v2[idx] * weight;
-        } else {
-          particle_v += (v2[idx] - v2_prior[idx]) * weight;
-        }
-        weight_sum += weight;
-      }
+      cell_weight_t *cell_weight = &particles_w[8 * i + j];
+
+      int cell_i = cell_weight->idx;
+      float cell_w = cell_weight->weight;
+
+      // isfinite handles nan as well, don't use isinf
+      if (cell_i < 0 || !cell_w || !isfinite(v1[cell_i]))
+        continue;
+
+      float delta_v = v1[cell_i] - (pic ? 0 : v1_prior[cell_i]);
+      v += delta_v * cell_w;
+      w += cell_w;
     }
-    if (pic) {
-      particles[i].v2 = particle_v / weight_sum;
-    } else {
-      particles[i].v2 += particle_v / weight_sum;
+    particles[i].v1 = v / w + (pic ? 0 : particles[i].v1);
+
+    v = 0.f;
+    w = 0.f;
+
+    for (int j = 0; j < 4; ++j) {
+      cell_weight_t *cell_weight = &particles_w[8 * i + 4 + j];
+      int cell_i = cell_weight->idx;
+      float cell_w = cell_weight->weight;
+
+      // isfinite handles nan as well, don't use isinf
+      if (cell_i < 0 || !cell_w || !isfinite(v2[cell_i]))
+        continue;
+
+      float delta_v = v2[cell_i] - (pic ? 0 : v2_prior[cell_i]);
+      v += delta_v * cell_w;
+      w += cell_w;
     }
+    particles[i].v2 = v / w + (pic ? 0 : particles[i].v2);
   }
 }
 

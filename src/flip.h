@@ -55,7 +55,7 @@ typedef struct {
 } cell_weight_t;
 
 extern particle_t *particles;
-extern cell_weight_t *particle_weights;
+extern cell_weight_t *particles_w;
 extern int n_particles;
 
 float now();

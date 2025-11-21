@@ -18,7 +18,7 @@ float v1_prior[V1N];
 float v2_prior[V1N];
 
 particle_t *particles;
-cell_weight_t *particle_weights;
+cell_weight_t *particles_w;
 int n_particles = MAX_PARTICLES;
 
 //=============
