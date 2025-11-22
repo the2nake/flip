@@ -10,7 +10,7 @@ constexpr int SIM_H = 60;
 constexpr int CELL_W = 5;
 constexpr int CELL_H = CELL_W;
 
-constexpr int DENSITY = 5;
+constexpr int DENSITY = 3;
 constexpr int PARTICLES_PER_CELL = DENSITY * DENSITY;
 constexpr int MAX_PARTICLES = PARTICLES_PER_CELL * SIM_W * SIM_H;
 

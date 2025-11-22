@@ -9,13 +9,6 @@
 
 #include "flip.h"
 
-/*
-TODO: future considerations
-cache locality
-more efficient data type for copy away from grid velocities
-using restrict keyword on pointers?
-*/
-
 //=============
 //    MAIN
 //=============
@@ -233,6 +226,13 @@ void advect() {
         p->x2 -= 2 * (dx2 > 0 ? 1 : -1) * fmax(fabs(dx2) / BACKTRACK, 1.5f);
         in_cell = particle_in(p, solid_e);
       }
+
+      // hacky way to avoid surface normals
+      // if (fabs(i - SIM_W * 0.5) > fabs(j - SIM_H * 0.5)) {
+      //   if ((p->v1 > 0) == (cell_x - p->x1 > 0)) { p->v1 *= -.95; }
+      // } else {
+      //   if ((p->v2 > 0) == (cell_y - p->x2 > 0)) { p->v2 *= -.95; }
+      // }
     }
     set_cell_at(&particles[i], water_e);
   }
