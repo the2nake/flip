@@ -1,12 +1,11 @@
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_main.h>
 #include <SDL3/SDL_pixels.h>
 #include <SDL3/SDL_render.h>
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_main.h>
 
 #include "flip.h"
 
@@ -61,11 +60,11 @@ int main() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       switch (event.type) {
-      case SDL_EVENT_QUIT:
-        running = false;
-        break;
-      default:
-        break;
+        case SDL_EVENT_QUIT:
+          running = false;
+          break;
+        default:
+          break;
       }
     }
 
@@ -151,19 +150,19 @@ void distribute_particles() {
 
   constexpr float x_gap = (float)CELL_W / DENSITY;
   constexpr float y_gap = (float)CELL_H / DENSITY;
-  constexpr float left_padding = x_gap / 2.f;
-  constexpr float top_padding = y_gap / 2.f;
+  constexpr float left_pad = x_gap / 2.f;
+  constexpr float top_pad = y_gap / 2.f;
 
   int idx = 0;
+
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      if (!cell_is(i, j, water_e))
-        continue;
+      if (!cell_is(i, j, water_e)) continue;
 
       for (int k = 0; k < PARTICLES_PER_CELL; ++k) {
         particles[idx] = (particle_t){
-            .x1 = j * CELL_W + left_padding + x_gap * (k % DENSITY),
-            .x2 = i * CELL_H + top_padding + y_gap * (int)(k / DENSITY),
+            .x1 = j * CELL_W + left_pad + x_gap * (k % DENSITY),
+            .x2 = i * CELL_H + top_pad + y_gap * (int)(k / DENSITY),
             .v1 = 0.f,
             .v2 = 0.f};
         ++idx;
@@ -176,8 +175,7 @@ int count_water_cells() {
   int res = 0;
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      if (cell_is(i, j, water_e))
-        ++res;
+      if (cell_is(i, j, water_e)) ++res;
     }
   }
   return res;
@@ -205,9 +203,7 @@ void advection() {
   // set fluid cells to air
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      if (states[i][j] != solid_e) {
-        states[i][j] = air_e;
-      }
+      if (states[i][j] != solid_e) { states[i][j] = air_e; }
     }
   }
 
@@ -234,14 +230,14 @@ void advection() {
 void compute_weights(particle_t *p, cell_weight_t *w);
 void add_weight(field_e_t field, cell_weight_t *cell, float v);
 void enforce_solid_velocity_field() {
-} // TODO! make sure solid block-caused velocities are not overridden
+}  // TODO! make sure solid block-caused velocities are not overridden
 
 void v_particles_to_grid() {
   particle_t *p = particles;
   reset_velocity_field();
   for (int i = 0; i < n_particles; ++i) {
-    // somehow this looped list pairing thing is faster by 0.1 ms and easier to
-    // read. vectorization? i don't even know
+    // somehow this looped list pairing thing is faster by 0.1 ms and
+    // easier to read. vectorization? i don't even know
 
     compute_weights(&p[i], &particles_w[8 * i]);
 
@@ -252,12 +248,10 @@ void v_particles_to_grid() {
   }
 
   for (int i = 0; i < V1N; ++i) {
-    if (isfinite(v1[i]) && w1[i])
-      v1[i] /= w1[i];
+    if (isfinite(v1[i]) && w1[i]) v1[i] /= w1[i];
   }
   for (int i = 0; i < V2N; ++i) {
-    if (isfinite(v2[i]) && w2[i])
-      v2[i] /= w2[i];
+    if (isfinite(v2[i]) && w2[i]) v2[i] /= w2[i];
   }
 
   enforce_solid_velocity_field();
@@ -265,8 +259,8 @@ void v_particles_to_grid() {
 }
 
 void compute_weights(particle_t *p, cell_weight_t *w) {
-  int v1_i = particle_v1_index(p); // index of top-left x vel
-  int v2_i = particle_v2_index(p); // index of top-left y vel
+  int v1_i = particle_v1_index(p);  // index of top-left x vel
+  int v2_i = particle_v2_index(p);  // index of top-left y vel
 
   int v1_row, v1_col, v2_row, v2_col;
   coordinates_from_index(v1_i, SIM_W + 1, &v1_row, &v1_col);
@@ -329,20 +323,17 @@ void projection(int iters) {
   for (int n = 0; n < iters; ++n) {
     for (int i = 1; i < SIM_H - 1; ++i) {
       for (int j = 1; j < SIM_W - 1; ++j) {
-        if (states[i][j] != water_e)
-          continue;
+        if (states[i][j] != water_e) continue;
 
         bool sl = states[i][j - 1] != solid_e;
         bool sr = states[i][j + 1] != solid_e;
         bool su = states[i - 1][j] != solid_e;
         bool sd = states[i + 1][j] != solid_e;
         int s = sl + sr + su + sd;
-        if (!s) {
-          continue;
-        }
+        if (!s) continue;
 
-        const int v1_i = i * (SIM_W + 1) + j; // left
-        const int v2_i = i * SIM_W + j;       // top
+        const int v1_i = i * (SIM_W + 1) + j;  // left
+        const int v2_i = i * SIM_W + j;        // top
 
         float *vl = &v1[v1_i];
         float *vr = &v1[v1_i + 1];
@@ -359,22 +350,18 @@ void projection(int iters) {
       }
     }
   }
+
   // assign velocities between non-water cells to nan
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W + 1; ++j) {
       bool borders_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
-      if (!borders_water) {
-        v1[i * (SIM_W + 1) + j] = NAN;
-      }
+      if (!borders_water) v1[i * (SIM_W + 1) + j] = NAN;
     }
   }
-
   for (int i = 0; i < SIM_H + 1; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
       bool borders_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
-      if (!borders_water) {
-        v2[i * SIM_W + j] = NAN;
-      }
+      if (!borders_water) v2[i * SIM_W + j] = NAN;
     }
   }
 }
@@ -404,8 +391,7 @@ void update_particle(int i, field_e_t field, bool pic) {
   float w = 0.f;
 
   for (int j = 0; j < 4; ++j, ++c) {
-    if (c->i < 0 || !c->w || !isfinite(v[c->i]))
-      continue;
+    if (c->i < 0 || !c->w || !isfinite(v[c->i])) continue;
 
     float change = v[c->i] - (pic ? 0.f : v_prior[c->i]);
     dv += change * c->w;
@@ -440,15 +426,15 @@ void render_cells(SDL_Renderer *renderer) {
     for (int j = 0; j < SIM_W; ++j) {
       SDL_FRect rect = {CELL_W * j, CELL_H * i, CELL_W, CELL_H};
       switch (states[i][j]) {
-      case water_e:
-        set_color(renderer, &c_fluid);
-        break;
-      case solid_e:
-        set_color(renderer, &c_wall);
-        break;
-      case air_e:
-        set_color(renderer, &c_air);
-        break;
+        case water_e:
+          set_color(renderer, &c_fluid);
+          break;
+        case solid_e:
+          set_color(renderer, &c_wall);
+          break;
+        case air_e:
+          set_color(renderer, &c_air);
+          break;
       }
       SDL_RenderFillRect(renderer, &rect);
     }
