@@ -134,7 +134,7 @@ void set_state_half_water_box() {
     for (int j = 0; j < SIM_W; ++j) {
       if (cell_on_edge(i, j)) {
         states[i][j] = solid_e;
-      } else if (j < SIM_W / 2) {
+      } else if (j * 2 < SIM_W && i > SIM_H / 5) {
         states[i][j] = water_e;
       } else {
         states[i][j] = air_e;
@@ -198,30 +198,48 @@ void update_prior_velocities() {
   memcpy(v2_prior, v2, V2N * sizeof(float));
 }
 
+// TODO! fix viscosity
 void advect() {
   // TODO? separate particles using LUT method, radix sorting
-  // set fluid cells to air
+  // set all non-solid cells to air
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
       if (states[i][j] != solid_e) { states[i][j] = air_e; }
     }
   }
 
-  // update particle locations and cell states
+  // move particles and update cell states
   for (int i = 0; i < n_particles; ++i) {
-    particles[i].v2 += k_gravity * k_timestep;
-    float dx1 = particles[i].v1 * k_timestep;
-    float dx2 = particles[i].v2 * k_timestep;
+    particle_t *p = &particles[i];
+    p->v2 += k_gravity * k_timestep;
+    float dx1 = p->v1 * k_timestep;
+    float dx2 = p->v2 * k_timestep;
 
-    particles[i].x1 += dx1;
-    particles[i].x2 += dx2;
+    p->x1 += dx1;
+    p->x2 += dx2;
 
-    particle_enforce_bounds(&particles[i]);
+    particle_enforce_bounds(p);
     // TODO? particles bounce off of walls with raycasting
-    for (int tries = 0; tries < 10 && particle_in(&particles[i], solid_e);
-         ++tries) {
-      particles[i].x1 -= dx1 / BACKTRACK_PRECISION;
-      particles[i].x2 -= dx2 / BACKTRACK_PRECISION;
+
+    bool in_cell = particle_in(p, solid_e);
+    if (in_cell) {
+      int j = p->x1 / CELL_W, i = p->x2 / CELL_H;
+      float cell_x = (j + 0.5) * CELL_W;
+      float cell_y = (i + 0.5) * CELL_H;
+
+      int tries = 0;
+      for (; tries < BACKTRACK && in_cell; ++tries) {
+        p->x1 -= 2 * (dx1 > 0 ? 1 : -1) * fmax(fabs(dx1) / BACKTRACK, 1.5f);
+        p->x2 -= 2 * (dx2 > 0 ? 1 : -1) * fmax(fabs(dx2) / BACKTRACK, 1.5f);
+        in_cell = particle_in(p, solid_e);
+      }
+
+      // hacky way to avoid surface normals
+      if (fabs(i - SIM_W * 0.5) > fabs(j - SIM_H * 0.5)) {
+        if ((p->v1 > 0) == (cell_x - p->x1 > 0)) { p->v1 *= -.95; }
+      } else {
+        if ((p->v2 > 0) == (cell_y - p->x2 > 0)) { p->v2 *= -.95; }
+      }
     }
     set_cell_at(&particles[i], water_e);
   }
@@ -450,7 +468,7 @@ void render_particles(SDL_Renderer *renderer) {
 }
 
 void render_velocities(SDL_Renderer *renderer) {
-  const float scale = 0.5;
+  const float scale = 0.25;
   set_color(renderer, &(SDL_Color){180, 255, 0, SDL_ALPHA_OPAQUE});
 
   // x velocities

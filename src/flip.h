@@ -4,30 +4,30 @@
 //    PARAMETERS
 //==================
 
-constexpr int SIM_W = 30;
-constexpr int SIM_H = 30;
+constexpr int SIM_W = 60;
+constexpr int SIM_H = 60;
 
 constexpr int CELL_W = 5;
 constexpr int CELL_H = CELL_W;
 
-constexpr int DENSITY = 2;
+constexpr int DENSITY = 5;
 constexpr int PARTICLES_PER_CELL = DENSITY * DENSITY;
 constexpr int MAX_PARTICLES = PARTICLES_PER_CELL * SIM_W * SIM_H;
 
-constexpr float BACKTRACK_PRECISION = 2;
+constexpr int BACKTRACK = 11;
 
 // TODO! convert window_scale to internal difference between graphical and
 // internal scale
 
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;
-constexpr float WINDOW_SCALE = 2.f;
+constexpr float WINDOW_SCALE = 3.f;
 
 extern const float k_frametime;
 extern const float k_timestep;
 extern const float k_gravity;
 extern const float k_relax;
-constexpr int k_iters = 40;
+constexpr int k_iters = 100 ;
 
 typedef enum { solid_e = 0, water_e = 1, air_e = 2 } state_e_t;
 typedef enum { v1_e, v2_e } field_e_t;
