@@ -24,10 +24,10 @@ void setup_scaling(SDL_Window *window, SDL_Renderer *renderer);
 
 void initialise();
 
-void advection();
-void v_particles_to_grid();
-void projection(int iters);
-void v_grid_to_particles();
+void advect();
+void v_to_grid();
+void project(int iters);
+void v_to_particles();
 
 void render_simulation(SDL_Renderer *renderer);
 
@@ -70,10 +70,10 @@ int main() {
 
     // simulation code
 
-    sum_t1 += time_of(advection());
-    sum_t2 += time_of(v_particles_to_grid());
-    sum_t3 += time_of(projection(k_iters));
-    sum_t4 += time_of(v_grid_to_particles());
+    sum_t1 += time_of(advect());
+    sum_t2 += time_of(v_to_grid());
+    sum_t3 += time_of(project(k_iters));
+    sum_t4 += time_of(v_to_particles());
 
     update_time += now() - t0;
 
@@ -198,7 +198,7 @@ void update_prior_velocities() {
   memcpy(v2_prior, v2, V2N * sizeof(float));
 }
 
-void advection() {
+void advect() {
   // TODO? separate particles using LUT method, radix sorting
   // set fluid cells to air
   for (int i = 0; i < SIM_H; ++i) {
@@ -232,7 +232,7 @@ void add_weight(field_e_t field, cell_weight_t *cell, float v);
 void enforce_solid_velocity_field() {
 }  // TODO! make sure solid block-caused velocities are not overridden
 
-void v_particles_to_grid() {
+void v_to_grid() {
   particle_t *p = particles;
   reset_velocity_field();
   for (int i = 0; i < n_particles; ++i) {
@@ -317,7 +317,7 @@ void add_weight(field_e_t field, cell_weight_t *c, float v) {
 }
 
 // enforce inflow = outflow iteratively
-void projection(int iters) {
+void project(int iters) {
   // TODO! fix particle lagging in the air, check its velocity field
   // TODO: compensate for high density areas
   for (int n = 0; n < iters; ++n) {
@@ -368,7 +368,7 @@ void projection(int iters) {
 
 void update_particle(int i, field_e_t field, bool pic);
 
-void v_grid_to_particles() {
+void v_to_particles() {
   bool pic = false;
 
   for (int i = 0; i < n_particles; ++i) {
