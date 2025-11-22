@@ -233,13 +233,6 @@ void advect() {
         p->x2 -= 2 * (dx2 > 0 ? 1 : -1) * fmax(fabs(dx2) / BACKTRACK, 1.5f);
         in_cell = particle_in(p, solid_e);
       }
-
-      // hacky way to avoid surface normals
-      if (fabs(i - SIM_W * 0.5) > fabs(j - SIM_H * 0.5)) {
-        if ((p->v1 > 0) == (cell_x - p->x1 > 0)) { p->v1 *= -.95; }
-      } else {
-        if ((p->v2 > 0) == (cell_y - p->x2 > 0)) { p->v2 *= -.95; }
-      }
     }
     set_cell_at(&particles[i], water_e);
   }
@@ -384,39 +377,44 @@ void project(int iters) {
   }
 }
 
-void update_particle(int i, field_e_t field, bool pic);
+void update_particle(int i, field_e_t field, float pic);
 
 void v_to_particles() {
-  bool pic = false;
+  float pic = 0.02;
 
   for (int i = 0; i < n_particles; ++i) {
-    update_particle(i, v1_e, pic);
-    update_particle(i, v2_e, pic);
+    update_particle(i, v1_e, k_flip);
+    update_particle(i, v2_e, k_flip);
   }
 }
 
-void update_particle(int i, field_e_t field, bool pic) {
+void update_particle(int i, field_e_t field, float flip) {
   assert(0 <= i && i < n_particles);
+  assert(-0.01 <= flip && flip <= 1.01);
 
   // clang-format off
   cell_weight_t *c = &particles_w[8 * i + (field == v2_e) * 4];
-  float *v         = field == v1_e ? v1               : v2;
+  float *vf         = field == v1_e ? v1               : v2;
   float *v_prior   = field == v1_e ? v1_prior         : v2_prior;
   float *v_out     = field == v1_e ? &particles[i].v1 : &particles[i].v2;
   // clang-format on
 
-  float dv = 0.f;
+  float v_pic = 0.f;
+  float v_flip = 0.f;
   float w = 0.f;
 
   for (int j = 0; j < 4; ++j, ++c) {
-    if (c->i < 0 || !c->w || !isfinite(v[c->i])) continue;
+    if (c->i < 0 || !c->w || !isfinite(vf[c->i])) continue;
 
-    float change = v[c->i] - (pic ? 0.f : v_prior[c->i]);
-    dv += change * c->w;
+    v_pic += vf[c->i] * c->w;
+    v_flip += (vf[c->i] - v_prior[c->i]) * c->w;
     w += c->w;
   }
 
-  *v_out = dv / w + (pic ? 0.f : *v_out);
+  v_flip = v_flip / w + *v_out;
+  v_pic = v_pic / w;
+
+  *v_out = lerp(v_pic, v_flip, flip);
 }
 
 void render_cells(SDL_Renderer *renderer);

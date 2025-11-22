@@ -27,7 +27,8 @@ extern const float k_frametime;
 extern const float k_timestep;
 extern const float k_gravity;
 extern const float k_relax;
-constexpr int k_iters = 100 ;
+extern const float k_flip;
+extern const int k_iters;
 
 typedef enum { solid_e = 0, water_e = 1, air_e = 2 } state_e_t;
 typedef enum { v1_e, v2_e } field_e_t;
@@ -69,6 +70,7 @@ void print_w2();
 bool in_rangei(int val, int lo, int hi);
 bool in_rangef(float val, float lo, float hi);
 float clamp(float val, const float lo, const float hi);
+float lerp(float a, float b, float t);
 
 bool cell_in_bounds(int i, int j);
 bool particle_in_bounds(particle_t *p);
