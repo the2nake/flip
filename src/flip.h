@@ -18,7 +18,7 @@ constexpr int BACKTRACK = 11;
 
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;
-constexpr float WINDOW_SCALE = 2.5f;
+constexpr float WINDOW_SCALE = 3.0f;
 
 //==================
 //   MACROS

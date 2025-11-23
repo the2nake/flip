@@ -1,5 +1,8 @@
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_keycode.h>
 #include <SDL3/SDL_main.h>
+#include <SDL3/SDL_oldnames.h>
 #include <SDL3/SDL_pixels.h>
 #include <SDL3/SDL_render.h>
 #include <assert.h>
@@ -24,14 +27,24 @@ void v_to_particles();
 
 void render_simulation(SDL_Renderer *renderer);
 
+bool paused = true;
+bool show_particles = false;
+bool show_velocities = false;
+
+void set_color(SDL_Renderer *renderer, const SDL_Color *color) {
+  SDL_SetRenderDrawColor(renderer, color->r, color->g, color->b, color->a);
+}
+
 int main() {
   printf("\n");
 
   SDL_Init(SDL_INIT_VIDEO);
 
-  SDL_Window *window =
-      SDL_CreateWindow("ffs", WINDOW_W * WINDOW_SCALE, WINDOW_H * WINDOW_SCALE,
-                       SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  const int window_pixel_w = WINDOW_W * WINDOW_SCALE;
+  const int window_pixel_h = WINDOW_H * WINDOW_SCALE;
+
+  SDL_Window *window = SDL_CreateWindow("ffs", window_pixel_w, window_pixel_h,
+                                        SDL_WINDOW_HIGH_PIXEL_DENSITY);
   SDL_Renderer *renderer = SDL_CreateRenderer(window, NULL);
 
   setup_scaling(window, renderer);
@@ -48,31 +61,52 @@ int main() {
   initialise();
 
   while (running) {
-    float t0 = now();
-
     SDL_Event event;
+
     while (SDL_PollEvent(&event)) {
       switch (event.type) {
         case SDL_EVENT_QUIT:
           running = false;
           break;
+        case (SDL_EVENT_KEY_UP):
+          switch (event.key.key) {
+            case SDLK_P:
+              show_particles = !show_particles;
+              break;
+            case SDLK_V:
+              show_velocities = !show_velocities;
+              break;
+            case SDLK_SPACE:
+              paused = !paused;
+              break;
+            default:
+              break;
+          }
         default:
           break;
       }
     }
 
-    // simulation code
+    float t0 = now();
 
-    sum_t1 += time_of(advect());
-    sum_t2 += time_of(v_to_grid());
-    sum_t3 += time_of(project(k_iters));
-    sum_t4 += time_of(v_to_particles());
+    if (!paused) {
+      // simulation code
 
-    update_time += now() - t0;
+      sum_t1 += time_of(advect());
+      sum_t2 += time_of(v_to_grid());
+      sum_t3 += time_of(project(k_iters));
+      sum_t4 += time_of(v_to_particles());
 
-    // rendering code
+      update_time += now() - t0;
+    }
 
     render_simulation(renderer);
+
+    if (paused) {
+      set_color(renderer, &(SDL_Color){0, 0, 0, SDL_ALPHA_OPAQUE});
+      SDL_RenderDebugText(renderer, window_pixel_w * 0.1, window_pixel_h * 0.1,
+                          "PAUSED: [space] to resume");
+    }
 
     SDL_RenderPresent(renderer);
 
@@ -422,19 +456,15 @@ void render_velocities(SDL_Renderer *renderer);
 
 void render_simulation(SDL_Renderer *renderer) {
   render_cells(renderer);
-  render_particles(renderer);
-  render_velocities(renderer);
-}
-
-void set_color(SDL_Renderer *renderer, const SDL_Color *color) {
-  SDL_SetRenderDrawColor(renderer, color->r, color->g, color->b, color->a);
+  if (show_particles) { render_particles(renderer); }
+  if (show_velocities) { render_velocities(renderer); }
 }
 
 void render_cells(SDL_Renderer *renderer) {
   // clang-format off
   const SDL_Color c_wall  = {155, 155, 155, SDL_ALPHA_OPAQUE};
   const SDL_Color c_fluid = {200, 220, 255, SDL_ALPHA_OPAQUE};
-  const SDL_Color c_air   = {255, 255, 255, SDL_ALPHA_OPAQUE};
+  const SDL_Color c_air   = {255, 254, 255, SDL_ALPHA_OPAQUE};
   // clang-format on
 
   for (int i = 0; i < SIM_H; ++i) {
@@ -467,14 +497,14 @@ void render_particles(SDL_Renderer *renderer) {
 
 void render_velocities(SDL_Renderer *renderer) {
   const float scale = 0.1 * WINDOW_SCALE;
-  set_color(renderer, &(SDL_Color){180, 255, 0, SDL_ALPHA_OPAQUE});
+  set_color(renderer, &(SDL_Color){160, 255, 0, SDL_ALPHA_OPAQUE});
 
   // x velocities
   for (int i = 0; i < V1N; ++i) {
     int row = 0, col = 0;
     coordinates_from_index(i, SIM_W + 1, &row, &col);
-    int x = WINDOW_SCALE * col * CELL_W;
-    int y = WINDOW_SCALE * (row + 0.5) * CELL_H;
+    float x = WINDOW_SCALE * col * CELL_W;
+    float y = WINDOW_SCALE * (row + 0.5) * CELL_H;
     SDL_RenderLine(renderer, x, y, x + v1[i] * scale, y);
   }
 
@@ -482,8 +512,8 @@ void render_velocities(SDL_Renderer *renderer) {
   for (int i = 0; i < V2N; ++i) {
     int row = 0, col = 0;
     coordinates_from_index(i, SIM_W, &row, &col);
-    int x = WINDOW_SCALE * (col + 0.5) * CELL_W;
-    int y = WINDOW_SCALE * row * CELL_H;
+    float x = WINDOW_SCALE * (col + 0.5) * CELL_W;
+    float y = WINDOW_SCALE * row * CELL_H;
     SDL_RenderLine(renderer, x, y, x, y + v2[i] * scale);
   }
 }

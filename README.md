@@ -15,6 +15,12 @@ cmake --build build
 
 Run the program with command `./ffs` or potentially `./ffs.exe` on Windows.
 
+| key          | behaviour           |
+| ------------ | ------------------- |
+| `[p]`        | show particles      |
+| `[v]`        | show velocity field |
+| `[spacebar]` | pause/resume        |
+
 ## [dependencies]
 
 - SDL3
