@@ -98,6 +98,7 @@ int main() {
       sum_t4 += time_of(v_to_particles());
 
       update_time += now() - t0;
+      ++cycles;
     }
 
     render_simulation(renderer);
@@ -111,7 +112,6 @@ int main() {
     SDL_RenderPresent(renderer);
 
     SDL_Delay(1000 * fmax(k_frametime - (now() - t0), 0.f));
-    ++cycles;
   }
 
   free(particles);
