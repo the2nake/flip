@@ -101,8 +101,8 @@ void setup_scaling(SDL_Window *w, SDL_Renderer *r) {
   float window_dpi = SDL_GetWindowDisplayScale(w);
   float pixel_density = SDL_GetWindowPixelDensity(w);
 
-  printf("content dpi scaling: %.2f\n", content_dpi);
-  printf("window dpi scaling: %.2f\n", window_dpi);
+  printf(" content dpi scaling: %.2f\n", content_dpi);
+  printf("  window dpi scaling: %.2f\n", window_dpi);
   printf("window pixel density: %.2f\n\n", pixel_density);
 
   SDL_SetRenderScale(r, pixel_density, pixel_density);
