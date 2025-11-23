@@ -105,8 +105,7 @@ void setup_scaling(SDL_Window *w, SDL_Renderer *r) {
   printf("window dpi scaling: %.2f\n", window_dpi);
   printf("window pixel density: %.2f\n\n", pixel_density);
 
-  float scale = pixel_density * WINDOW_SCALE;
-  SDL_SetRenderScale(r, scale, scale);
+  SDL_SetRenderScale(r, pixel_density, pixel_density);
 }
 
 void set_state_half_water_box();
@@ -424,7 +423,7 @@ void render_velocities(SDL_Renderer *renderer);
 void render_simulation(SDL_Renderer *renderer) {
   render_cells(renderer);
   render_particles(renderer);
-  // render_velocities(renderer);
+  render_velocities(renderer);
 }
 
 void set_color(SDL_Renderer *renderer, const SDL_Color *color) {
@@ -440,7 +439,8 @@ void render_cells(SDL_Renderer *renderer) {
 
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
-      SDL_FRect rect = {CELL_W * j, CELL_H * i, CELL_W, CELL_H};
+      SDL_FRect rect = {WINDOW_SCALE * CELL_W * j, WINDOW_SCALE * CELL_H * i,
+                        WINDOW_SCALE * CELL_W, WINDOW_SCALE * CELL_H};
       switch (states[i][j]) {
         case water_e:
           set_color(renderer, &c_fluid);
@@ -461,20 +461,20 @@ void render_particles(SDL_Renderer *renderer) {
   set_color(renderer, &(SDL_Color){4, 2, 0, SDL_ALPHA_OPAQUE});
   for (int i = 0; i < n_particles; ++i) {
     particle_t p = particles[i];
-    SDL_RenderPoint(renderer, p.x1, p.x2);
+    SDL_RenderPoint(renderer, WINDOW_SCALE * p.x1, WINDOW_SCALE * p.x2);
   }
 }
 
 void render_velocities(SDL_Renderer *renderer) {
-  const float scale = 0.25;
+  const float scale = 0.1 * WINDOW_SCALE;
   set_color(renderer, &(SDL_Color){180, 255, 0, SDL_ALPHA_OPAQUE});
 
   // x velocities
   for (int i = 0; i < V1N; ++i) {
     int row = 0, col = 0;
     coordinates_from_index(i, SIM_W + 1, &row, &col);
-    int x = col * CELL_W;
-    int y = (row + 0.5) * CELL_H;
+    int x = WINDOW_SCALE * col * CELL_W;
+    int y = WINDOW_SCALE * (row + 0.5) * CELL_H;
     SDL_RenderLine(renderer, x, y, x + v1[i] * scale, y);
   }
 
@@ -482,8 +482,8 @@ void render_velocities(SDL_Renderer *renderer) {
   for (int i = 0; i < V2N; ++i) {
     int row = 0, col = 0;
     coordinates_from_index(i, SIM_W, &row, &col);
-    int mid_x = (col + 0.5) * CELL_W;
-    int mid_y = row * CELL_H;
-    SDL_RenderLine(renderer, mid_x, mid_y, mid_x, mid_y + v2[i] * scale);
+    int x = WINDOW_SCALE * (col + 0.5) * CELL_W;
+    int y = WINDOW_SCALE * row * CELL_H;
+    SDL_RenderLine(renderer, x, y, x, y + v2[i] * scale);
   }
 }

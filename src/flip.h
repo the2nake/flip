@@ -1,7 +1,7 @@
 #pragma once
 
 //==================
-//    PARAMETERS
+//   PARAMETERS
 //==================
 
 constexpr int SIM_W = 60;
@@ -16,12 +16,21 @@ constexpr int MAX_PARTICLES = PARTICLES_PER_CELL * SIM_W * SIM_H;
 
 constexpr int BACKTRACK = 11;
 
-// TODO! convert window_scale to internal difference between graphical and
-// internal scale
-
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;
-constexpr float WINDOW_SCALE = 3.f;
+constexpr float WINDOW_SCALE = 2.5f;
+
+//==================
+//   MACROS
+//==================
+
+#define time_of(x)           \
+  ({                         \
+    float time_of_s = now(); \
+    x;                       \
+    float time_of_e = now(); \
+    time_of_e - time_of_s;   \
+  })
 
 extern const float k_frametime;
 extern const float k_timestep;
@@ -34,20 +43,20 @@ typedef enum { solid_e = 0, water_e = 1, air_e = 2 } state_e_t;
 typedef enum { v1_e, v2_e } field_e_t;
 
 typedef struct {
-  float x1; // x position
-  float x2; // y position
-  float v1; // x velocity
-  float v2; // y velocity
+  float x1;  // x position
+  float x2;  // y position
+  float v1;  // x velocity
+  float v2;  // y velocity
 } particle_t;
 
 constexpr int V1N = (SIM_W + 1) * SIM_H;
 constexpr int V2N = SIM_W * (SIM_H + 1);
 
-extern state_e_t states[SIM_H][SIM_W]; // states
-extern float v1[V1N];                  // horizontal velocity
-extern float v2[V2N];                  // vertical velocity
-extern float w1[V1N];                  // velocity field weights
-extern float w2[V2N];                  // velocity field weights
+extern state_e_t states[SIM_H][SIM_W];  // states
+extern float v1[V1N];                   // horizontal velocity
+extern float v2[V2N];                   // vertical velocity
+extern float w1[V1N];                   // velocity field weights
+extern float w2[V2N];                   // velocity field weights
 extern float v1_prior[V1N];
 extern float v2_prior[V1N];
 
@@ -77,8 +86,8 @@ bool particle_in_bounds(particle_t *p);
 
 void particle_enforce_bounds(particle_t *p);
 
-int particle_v1_index(particle_t *p); // index of top-left x vel
-int particle_v2_index(particle_t *p); // index of top-left y vel
+int particle_v1_index(particle_t *p);  // index of top-left x vel
+int particle_v2_index(particle_t *p);  // index of top-left y vel
 
 void coordinates_from_index(int index, int row_width, int *row, int *col);
 
@@ -91,11 +100,3 @@ void set_cell_at(particle_t *particle, state_e_t state);
 
 bool particle_in(particle_t *particle, state_e_t state);
 float particle_velocity(particle_t *p);
-
-#define time_of(x)                                                             \
-  ({                                                                           \
-    float time_of_s = now();                                                   \
-    x;                                                                         \
-    float time_of_e = now();                                                   \
-    time_of_e - time_of_s;                                                     \
-  })
