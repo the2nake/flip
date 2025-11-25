@@ -273,8 +273,6 @@ void advect() {
 
 void compute_weights(particle_t *p, cell_weight_t *w);
 void add_weight(field_e_t field, cell_weight_t *cell, float v);
-void enforce_solid_velocity_field() {
-}  // TODO! make sure solid block-caused velocities are not overridden
 
 void v_to_grid() {
   particle_t *p = particles;
@@ -297,9 +295,6 @@ void v_to_grid() {
   for (int i = 0; i < V2N; ++i) {
     if (isfinite(v2[i]) && w2[i]) v2[i] /= w2[i];
   }
-
-  enforce_solid_velocity_field();
-  update_prior_velocities();
 }
 
 void compute_weights(particle_t *p, cell_weight_t *w) {
@@ -362,6 +357,8 @@ void add_weight(field_e_t field, cell_weight_t *c, float v) {
 
 // enforce inflow = outflow iteratively
 void project(int iters) {
+  update_prior_velocities();
+
   // TODO! fix particle lagging in the air, check its velocity field
   // TODO: compensate for high density areas
   for (int n = 0; n < iters; ++n) {

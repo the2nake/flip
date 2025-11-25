@@ -28,7 +28,7 @@ int n_particles = MAX_PARTICLES;
 //=============
 
 void print_field(float *arr, int w, int h, const char *name) {
-  printf("-- %s --", name);
+  printf("-- %s --\n", name);
   for (int i = 0; i < h; ++i) {
     for (int j = 0; j < w; ++j) {
       printf("%4.1f ", arr[w * i + j]);

@@ -4,8 +4,8 @@
 //   PARAMETERS
 //==================
 
-constexpr int SIM_W = 60;
-constexpr int SIM_H = 60;
+constexpr int SIM_W = 50;
+constexpr int SIM_H = 50;
 
 constexpr int CELL_W = 5;
 constexpr int CELL_H = CELL_W;
