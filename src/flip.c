@@ -11,16 +11,18 @@ const float k_relax = 1.9;
 const float k_flip = 0.93;
 const int k_iters = 100;
 
-state_e_t states[SIM_H][SIM_W]; // states
-float v1[V1N];                  // horizontal velocity
-float v2[V2N];                  // vertical velocity
-float w1[V1N];                  // velocity field weights
-float w2[V2N];                  // velocity field weights
+state_e_t states[SIM_H][SIM_W];  // states
+float densities[SIM_H][SIM_W];   // densities
+
+float v1[V1N];  // horizontal velocity
+float v2[V2N];  // vertical velocity
+float w1[V1N];  // velocity field weights
+float w2[V2N];  // velocity field weights
 float v1_prior[V1N];
 float v2_prior[V1N];
 
 particle_t *particles;
-cell_weight_t *particles_w;
+vel_weight_t *vel_ws;
 int n_particles = MAX_PARTICLES;
 
 //=============
@@ -30,9 +32,7 @@ int n_particles = MAX_PARTICLES;
 void print_field(float *arr, int w, int h, const char *name) {
   printf("-- %s --\n", name);
   for (int i = 0; i < h; ++i) {
-    for (int j = 0; j < w; ++j) {
-      printf("%4.1f ", arr[w * i + j]);
-    }
+    for (int j = 0; j < w; ++j) { printf("%4.1f ", arr[w * i + j]); }
     printf("\n");
   }
   printf("---\n");
@@ -53,19 +53,19 @@ float now() { return (float)clock() / CLOCKS_PER_SEC; }
 bool in_rangei(int val, int lo, int hi) { return lo <= val && val <= hi; }
 bool in_rangef(float val, float lo, float hi) { return lo <= val && val <= hi; }
 
-float clamp(float val, const float lo, const float hi) {
-  if (val > hi) {
-    return hi;
-  }
-  if (val < lo) {
-    return lo;
-  }
+int iclamp(int val, const int lo, const int hi) {
+  if (val > hi) { return hi; }
+  if (val < lo) { return lo; }
   return val;
 }
 
-float lerp(float a, float b, float t) {
-  return a + t * (b - a);
+float fclamp(float val, const float lo, const float hi) {
+  if (val > hi) { return hi; }
+  if (val < lo) { return lo; }
+  return val;
 }
+
+float lerp(float a, float b, float t) { return a + t * (b - a); }
 
 bool cell_in_bounds(int i, int j) {
   return 0 <= i && i < SIM_H && 0 <= j && j < SIM_W;
@@ -78,8 +78,8 @@ bool particle_in_bounds(particle_t *p) {
 
 void particle_enforce_bounds(particle_t *p) {
   if (!particle_in_bounds(p)) {
-    p->x1 = clamp(p->x1, 0.f, SIM_W * CELL_W);
-    p->x2 = clamp(p->x2, 0.f, SIM_H * CELL_H);
+    p->x1 = fclamp(p->x1, 0.f, SIM_W * CELL_W);
+    p->x2 = fclamp(p->x2, 0.f, SIM_H * CELL_H);
   }
 }
 
@@ -115,34 +115,26 @@ void position_in_v2_grid(particle_t *p, int row, int col, float *dx,
 }
 
 bool cell_on_edge(int i, int j) {
-  if (i == 0 || i == SIM_H - 1) {
-    return true;
-  }
-  if (j == 0 || j == SIM_W - 1) {
-    return true;
-  }
+  if (i == 0 || i == SIM_H - 1) { return true; }
+  if (j == 0 || j == SIM_W - 1) { return true; }
   return false;
 }
 
 bool cell_is(int i, int j, state_e_t state) {
-  if (cell_in_bounds(i, j)) {
-    return states[i][j] == state;
-  }
+  if (cell_in_bounds(i, j)) { return states[i][j] == state; }
   return false;
 }
 
 void set_cell_at(particle_t *particle, state_e_t state) {
   int j = particle->x1 / CELL_W;
   int i = particle->x2 / CELL_H;
-  if (cell_in_bounds(i, j)) {
-    states[i][j] = state;
-  }
+  if (cell_in_bounds(i, j)) { states[i][j] = state; }
 }
 
 bool particle_in(particle_t *particle, state_e_t state) {
   int j = particle->x1 / CELL_W;
   int i = particle->x2 / CELL_H;
-  return cell_is(i, j, state); // check bounds to not lose particles
+  return cell_is(i, j, state);  // check bounds to not lose particles
 }
 
 float particle_velocity(particle_t *p) { return hypot(p->v1, p->v2); }

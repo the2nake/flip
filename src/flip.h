@@ -10,7 +10,7 @@ constexpr int SIM_H = 50;
 constexpr int CELL_W = 5;
 constexpr int CELL_H = CELL_W;
 
-constexpr int DENSITY = 3;
+constexpr int DENSITY = 4;
 constexpr int PARTICLES_PER_CELL = DENSITY * DENSITY;
 constexpr int MAX_PARTICLES = PARTICLES_PER_CELL * SIM_W * SIM_H;
 
@@ -53,20 +53,22 @@ constexpr int V1N = (SIM_W + 1) * SIM_H;
 constexpr int V2N = SIM_W * (SIM_H + 1);
 
 extern state_e_t states[SIM_H][SIM_W];  // states
-extern float v1[V1N];                   // horizontal velocity
-extern float v2[V2N];                   // vertical velocity
-extern float w1[V1N];                   // velocity field weights
-extern float w2[V2N];                   // velocity field weights
+extern float densities[SIM_H][SIM_W];   // densities
+
+extern float v1[V1N];  // horizontal velocity
+extern float v2[V2N];  // vertical velocity
+extern float w1[V1N];  // velocity field weights
+extern float w2[V2N];  // velocity field weights
 extern float v1_prior[V1N];
 extern float v2_prior[V1N];
 
 typedef struct {
   int i;
   float w;
-} cell_weight_t;
+} vel_weight_t;
 
 extern particle_t *particles;
-extern cell_weight_t *particles_w;
+extern vel_weight_t *vel_ws;
 extern int n_particles;
 
 float now();
@@ -78,7 +80,9 @@ void print_w2();
 
 bool in_rangei(int val, int lo, int hi);
 bool in_rangef(float val, float lo, float hi);
-float clamp(float val, const float lo, const float hi);
+
+int iclamp(int val, const int lo, const int hi);
+float fclamp(float val, const float lo, const float hi);
 float lerp(float a, float b, float t);
 
 bool cell_in_bounds(int i, int j);
