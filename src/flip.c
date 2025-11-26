@@ -70,20 +70,24 @@ float fclamp(float val, const float lo, const float hi) {
 
 float lerp(float a, float b, float t) { return a + t * (b - a); }
 
+void normalise(float *v1, float *v2) {
+  float hypot = hypotf(*v1, *v2);
+  *v1 /= hypot;
+  *v2 /= hypot;
+}
+
 bool cell_in_bounds(int i, int j) {
   return 0 <= i && i < SIM_H && 0 <= j && j < SIM_W;
 }
 
 bool particle_in_bounds(particle_t *p) {
-  return 0.f <= p->x1 && p->x1 <= SIM_W * CELL_W && 0.f <= p->x2 &&
-         p->x2 <= SIM_H * CELL_H;
+  return 0.f <= p->x1 && p->x1 <= SIM_W * CELL_W &&  // x
+         0.f <= p->x2 && p->x2 <= SIM_H * CELL_H;    // y
 }
 
 void particle_enforce_bounds(particle_t *p) {
-  if (!particle_in_bounds(p)) {
-    p->x1 = fclamp(p->x1, 0.f, SIM_W * CELL_W);
-    p->x2 = fclamp(p->x2, 0.f, SIM_H * CELL_H);
-  }
+  p->x1 = fclamp(p->x1, 0.f, SIM_W * CELL_W);
+  p->x2 = fclamp(p->x2, 0.f, SIM_H * CELL_H);
 }
 
 // index of top-left x vel
@@ -128,15 +132,39 @@ bool cell_is(int i, int j, state_e_t state) {
   return false;
 }
 
+void get_cell_normal(int i, int j, float *v1, float *v2) {
+  *v1 = 0.f;
+  *v2 = 0.f;
+  if (!cell_is(i, j, solid_e)) { return; }
+  if (cell_on_edge(i, j)) {
+    if (i == 0) {
+      *v2 = 1.f;
+    } else if (i == SIM_H - 1) {
+      *v2 = -1.f;
+    }
+    if (j == 0) {
+      *v1 = 1.f;
+    } else if (j == SIM_W - 1) {
+      *v1 = -1.f;
+    }
+  }
+  normalise(v1, v2);
+}
+
 void set_cell_at(particle_t *particle, state_e_t state) {
-  int j = particle->x1 / CELL_W;
-  int i = particle->x2 / CELL_H;
+  int i = 0, j = 0;
+  get_particle_cell(particle, &i, &j);
   if (cell_in_bounds(i, j)) { states[i][j] = state; }
 }
 
+void get_particle_cell(particle_t *particle, int *i, int *j) {
+  *j = particle->x1 / CELL_W;
+  *i = particle->x2 / CELL_H;
+}
+
 bool particle_in(particle_t *particle, state_e_t state) {
-  int j = particle->x1 / CELL_W;
-  int i = particle->x2 / CELL_H;
+  int i = 0, j = 0;
+  get_particle_cell(particle, &i, &j);
   return cell_is(i, j, state);  // check bounds to not lose particles
 }
 

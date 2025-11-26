@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_log.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_oldnames.h>
 #include <SDL3/SDL_pixels.h>
@@ -290,23 +291,23 @@ void advect() {
 
     bool in_cell = particle_in(p, solid_e);
     if (in_cell) {
-      int j = p->x1 / CELL_W, i = p->x2 / CELL_H;
-      float cell_x = (j + 0.5) * CELL_W;
-      float cell_y = (i + 0.5) * CELL_H;
+      int c_i = 0, c_j = 0;
+      get_particle_cell(p, &c_i, &c_j);
+      get_cell_normal(c_i, c_j, &dx1, &dx2);
 
       int tries = 0;
-      for (; tries < BACKTRACK && in_cell; ++tries) {
-        p->x1 -= 2 * (dx1 > 0 ? 1 : -1) * fmax(fabs(dx1) / BACKTRACK, 1.5f);
-        p->x2 -= 2 * (dx2 > 0 ? 1 : -1) * fmax(fabs(dx2) / BACKTRACK, 1.5f);
+      for (; tries < BACKTRACK_ATTEMPTS && in_cell; ++tries) {
+        p->x1 += BACKTRACK_RANGE * dx1 * CELL_W / BACKTRACK_ATTEMPTS;
+        p->x2 += BACKTRACK_RANGE * dx2 * CELL_H / BACKTRACK_ATTEMPTS;
+        // particle_enforce_bounds(p);
         in_cell = particle_in(p, solid_e);
       }
 
-      // hacky way to avoid surface normals
-      // if (fabs(i - SIM_W * 0.5) > fabs(j - SIM_H * 0.5)) {
-      //   if ((p->v1 > 0) == (cell_x - p->x1 > 0)) { p->v1 *= -.95; }
-      // } else {
-      //   if ((p->v2 > 0) == (cell_y - p->x2 > 0)) { p->v2 *= -.95; }
-      // }
+      if (in_cell) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "particle inside a solid");
+      } else if (!particle_in_bounds(p)) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "particle out of bounds");
+      }
     }
     set_cell_at(&particles[i], water_e);
   }

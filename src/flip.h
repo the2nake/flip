@@ -4,10 +4,10 @@
 //   PARAMETERS
 //==================
 
-constexpr int SIM_W = 50;
-constexpr int SIM_H = 50;
+constexpr int SIM_W = 100;
+constexpr int SIM_H = 100;
 
-constexpr int CELL_W = 5;
+constexpr int CELL_W = 1;
 constexpr int CELL_H = CELL_W;
 
 constexpr int PARTICLE_PACKING = 3;
@@ -17,11 +17,12 @@ constexpr int MAX_PARTICLES = PARTICLES_PER_CELL * SIM_W * SIM_H;
 constexpr float PARTICLE_SIZE = (float)CELL_W / PARTICLE_PACKING;
 constexpr float DENSITY_0 = PARTICLES_PER_CELL;
 
-constexpr int BACKTRACK = 11;
+constexpr int BACKTRACK_RANGE = 2;
+constexpr int BACKTRACK_ATTEMPTS = 10;
 
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;
-constexpr float WINDOW_SCALE = 3.0f;
+constexpr float WINDOW_SCALE = 6.0f;
 
 //==================
 //   MACROS
@@ -54,6 +55,11 @@ typedef struct {
   float v1;  // x velocity
   float v2;  // y velocity
 } particle_t;
+
+typedef struct {
+  int i;
+  int j;
+} cell_t;
 
 constexpr int V1N = (SIM_W + 1) * SIM_H;
 constexpr int V2N = SIM_W * (SIM_H + 1);
@@ -106,7 +112,9 @@ void position_in_v2_grid(particle_t *p, int row, int col, float *dx, float *dy);
 
 bool cell_on_edge(int i, int j);
 bool cell_is(int i, int j, state_e_t state);
+void get_cell_normal(int i, int j, float *v1, float *v2);
 void set_cell_at(particle_t *particle, state_e_t state);
 
+void get_particle_cell(particle_t *particle, int *i, int *j);
 bool particle_in(particle_t *particle, state_e_t state);
 float particle_velocity(particle_t *p);
