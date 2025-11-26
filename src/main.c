@@ -186,8 +186,8 @@ void distribute_particles() {
   particles = malloc(n_particles * sizeof(particle_t));
   vel_ws = malloc(n_particles * 8 * sizeof(vel_weight_t));
 
-  constexpr float x_gap = (float)CELL_W / DENSITY;
-  constexpr float y_gap = (float)CELL_H / DENSITY;
+  constexpr float x_gap = PARTICLE_SIZE;
+  constexpr float y_gap = PARTICLE_SIZE;
   constexpr float left_pad = x_gap / 2.f;
   constexpr float top_pad = y_gap / 2.f;
 
@@ -199,8 +199,8 @@ void distribute_particles() {
 
       for (int k = 0; k < PARTICLES_PER_CELL; ++k) {
         particles[idx] = (particle_t){
-            .x1 = j * CELL_W + left_pad + x_gap * (k % DENSITY),
-            .x2 = i * CELL_H + top_pad + y_gap * (int)(k / DENSITY),
+            .x1 = j * CELL_W + left_pad + x_gap * (k % PARTICLE_PACKING),
+            .x2 = i * CELL_H + top_pad + y_gap * (int)(k / PARTICLE_PACKING),
             .v1 = 0.f,
             .v2 = 0.f};
         ++idx;
@@ -421,7 +421,8 @@ void project(int iters) {
         float *vu = &v2[v2_i];
         float *vd = &v2[v2_i + SIM_W];
 
-        float net = (*vr + *vd - *vl - *vu);
+        float net = (*vr + *vd - *vl - *vu) -
+                    k_stiffness * (densities[i][j] - PARTICLES_PER_CELL);
         float flow = k_relax * net / s;
 
         *vl += sl * flow;

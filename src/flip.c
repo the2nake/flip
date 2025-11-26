@@ -7,8 +7,11 @@
 const float k_frametime = 1.0 / 60.0;
 const float k_timestep = 1.0 / 60.0;
 const float k_gravity = 9.81 * SIM_H;
+
 const float k_relax = 1.9;
 const float k_flip = 0.93;
+const float k_stiffness = 1.0;
+
 const int k_iters = 100;
 
 state_e_t states[SIM_H][SIM_W];  // states
