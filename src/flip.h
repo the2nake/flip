@@ -14,7 +14,7 @@ constexpr int PARTICLE_PACKING = 3;
 constexpr int PARTICLES_PER_CELL = 9;
 constexpr int MAX_PARTICLES = PARTICLES_PER_CELL * SIM_W * SIM_H;
 
-constexpr float PARTICLE_SIZE = CELL_W / PARTICLE_PACKING;
+constexpr float PARTICLE_SIZE = (float)CELL_W / PARTICLE_PACKING;
 constexpr float DENSITY_0 = PARTICLES_PER_CELL;
 
 constexpr int BACKTRACK = 11;
