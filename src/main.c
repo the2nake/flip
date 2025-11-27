@@ -117,6 +117,7 @@ int main() {
   }
 
   free(particles);
+  free(vel_ws);
 
   printf("\n -- finished -- \n\n");
 
