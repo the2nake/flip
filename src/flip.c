@@ -6,11 +6,11 @@
 
 const float k_frametime = 1.0 / 60.0;
 const float k_timestep = 1.0 / 60.0;
-const float k_gravity = 9.81 * SIM_H;
+const float k_gravity = 10 * SIM_H * CELL_H;
 
-const float k_relax = 1.9;
-const float k_flip = 0.93;
-const float k_stiffness = 1.0;
+const float k_relax = 1.9f;
+const float k_flip = 0.93f;
+const float k_stiffness = 1.f;
 
 const int k_iters = 100;
 
@@ -26,7 +26,7 @@ float v2_prior[V1N];
 
 particle_t *particles;
 vel_weight_t *vel_ws;
-int n_particles = MAX_PARTICLES;
+int n_particles = PARTICLES_PER_CELL * SIM_W * SIM_H;
 
 //=============
 //    DEBUG
@@ -86,8 +86,8 @@ bool particle_in_bounds(particle_t *p) {
 }
 
 void particle_enforce_bounds(particle_t *p) {
-  p->x1 = fclamp(p->x1, 0.f, SIM_W * CELL_W);
-  p->x2 = fclamp(p->x2, 0.f, SIM_H * CELL_H);
+  p->x1 = fclamp(p->x1, 0.f, SIM_W * CELL_W - 0.0001);
+  p->x2 = fclamp(p->x2, 0.f, SIM_H * CELL_H - 0.0001);
 }
 
 // index of top-left x vel

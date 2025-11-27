@@ -1,12 +1,5 @@
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_events.h>
-#include <SDL3/SDL_keycode.h>
-#include <SDL3/SDL_log.h>
-#include <SDL3/SDL_main.h>
-#include <SDL3/SDL_oldnames.h>
-#include <SDL3/SDL_pixels.h>
-#include <SDL3/SDL_render.h>
-#include <SDL3/SDL_stdinc.h>
+
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -279,6 +272,7 @@ void advect() {
   // move particles and update cell states
   for (int i = 0; i < n_particles; ++i) {
     particle_t *p = &particles[i];
+
     p->v2 += k_gravity * k_timestep;
     float dx1 = p->v1 * k_timestep;
     float dx2 = p->v2 * k_timestep;
@@ -292,13 +286,13 @@ void advect() {
     bool in_cell = particle_in(p, solid_e);
     if (in_cell) {
       int c_i = 0, c_j = 0;
+      float nx1 = 0.f, nx2 = 0.f;
       get_particle_cell(p, &c_i, &c_j);
-      get_cell_normal(c_i, c_j, &dx1, &dx2);
+      get_cell_normal(c_i, c_j, &nx1, &nx2);
 
-      int tries = 0;
-      for (; tries < BACKTRACK_ATTEMPTS && in_cell; ++tries) {
-        p->x1 += BACKTRACK_RANGE * dx1 * CELL_W / BACKTRACK_ATTEMPTS;
-        p->x2 += BACKTRACK_RANGE * dx2 * CELL_H / BACKTRACK_ATTEMPTS;
+      for (int n = 0; n < BACKTRACK_ATTEMPTS && in_cell; ++n) {
+        p->x1 += (BACKTRACK_RANGE / BACKTRACK_ATTEMPTS) * CELL_W * nx1;
+        p->x2 += (BACKTRACK_RANGE / BACKTRACK_ATTEMPTS) * CELL_H * nx2;
         // particle_enforce_bounds(p);
         in_cell = particle_in(p, solid_e);
       }
@@ -400,8 +394,6 @@ void add_weight(field_e_t field, vel_weight_t *vel_w, float vel) {
 void project(int iters) {
   update_prior_velocities();
 
-  // TODO! fix particle lagging in the air, check its velocity field
-  // TODO: compensate for high density areas
   for (int n = 0; n < iters; ++n) {
     for (int i = 1; i < SIM_H - 1; ++i) {
       for (int j = 1; j < SIM_W - 1; ++j) {

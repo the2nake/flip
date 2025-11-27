@@ -4,20 +4,19 @@
 //   PARAMETERS
 //==================
 
-constexpr int SIM_W = 100;
-constexpr int SIM_H = 100;
+constexpr int SIM_W = 60;
+constexpr int SIM_H = 60;
 
-constexpr int CELL_W = 1;
+constexpr int CELL_W = 2;
 constexpr int CELL_H = CELL_W;
 
 constexpr int PARTICLE_PACKING = 3;
 constexpr int PARTICLES_PER_CELL = 9;
-constexpr int MAX_PARTICLES = PARTICLES_PER_CELL * SIM_W * SIM_H;
 
 constexpr float PARTICLE_SIZE = (float)CELL_W / PARTICLE_PACKING;
 constexpr float DENSITY_0 = PARTICLES_PER_CELL;
 
-constexpr int BACKTRACK_RANGE = 2;
+constexpr float BACKTRACK_RANGE = 2.f;
 constexpr int BACKTRACK_ATTEMPTS = 10;
 
 constexpr int WINDOW_W = SIM_W * CELL_W;
@@ -96,6 +95,7 @@ bool in_rangef(float val, float lo, float hi);
 int iclamp(int val, const int lo, const int hi);
 float fclamp(float val, const float lo, const float hi);
 float lerp(float a, float b, float t);
+void normalise(float *v1, float *v2);
 
 bool cell_in_bounds(int i, int j);
 bool particle_in_bounds(particle_t *p);
