@@ -7,7 +7,9 @@ project(
 find_package(SDL3 REQUIRED CONFIG REQUIRED COMPONENTS SDL3-shared)
 
 add_link_options("-lm")
-add_executable(ffs src/main.c src/flip.c src/hash_grid.c)
+
+file(GLOB SRC_FILES "src/*.c")
+add_executable(ffs ${SRC_FILES})
 
 target_link_libraries(ffs PRIVATE SDL3::SDL3)
 set_target_properties(ffs PROPERTIES

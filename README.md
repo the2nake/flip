@@ -4,6 +4,13 @@ Reimplements the algorithm explained by Matthias Müller in C, using SDL3 to ren
 
 <img alt="preview image of fluid simulation" src="https://github.com/the2nake/flip/blob/master/docs/preview.png?raw=true"  height="600">
 
+## [features]
+
+* PIC-FLIP interpolation
+* particle and velocity visualisation
+* drift compensation based on density calculation
+* all on CPU
+
 ## [building]
 
 ```bash
