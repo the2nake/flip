@@ -1,5 +1,4 @@
 #include <SDL3/SDL.h>
-
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -58,7 +57,9 @@ int main() {
   float update_time = 0.0;
   long long cycles = 0;
 
-  float sum_t1 = 0.f, sum_t2 = 0.f, sum_t3 = 0.f, sum_t4 = 0.f, sum_t5 = 0.f;
+  constexpr int substeps = 5;
+  float step_times[substeps];
+  for (int i = 0; i < substeps; ++i) { step_times[i] = 0.f; }
 
   initialise();
 
@@ -93,11 +94,13 @@ int main() {
 
     if (!paused) {
       // simulation code
-      sum_t1 += time_of(compute_density());
-      sum_t2 += time_of(advect());
-      sum_t3 += time_of(v_to_grid());
-      sum_t4 += time_of(project(k_iters));
-      sum_t5 += time_of(v_to_particles());
+      float times[substeps] = {time_of(advect()),           //
+                               time_of(compute_density()),  //
+                               time_of(v_to_grid()),        //
+                               time_of(project(k_iters)),   //
+                               time_of(v_to_particles())};
+
+      for (int i = 0; i < substeps; ++i) { step_times[i] += times[i]; }
 
       update_time += now() - t0;
       ++cycles;
@@ -120,13 +123,17 @@ int main() {
   free(vel_ws);
 
   printf("\n -- finished -- \n\n");
-
   printf("time per cycle: %f ms\n", 1000.f * update_time / cycles);
-  printf("  density: %f ms\n", 1000.f * sum_t1 / cycles);
-  printf("   advect: %f ms\n", 1000.f * sum_t2 / cycles);
-  printf("  to_grid: %f ms\n", 1000.f * sum_t3 / cycles);
-  printf("  project: %f ms\n", 1000.f * sum_t4 / cycles);
-  printf("  to_part: %f ms\n", 1000.f * sum_t5 / cycles);
+
+  const char *labels[substeps] = {"   advect: %f ms\n",   //
+                                  "  density: %f ms\n",   //
+                                  "  to_grid: %f ms\n",   //
+                                  "  project: %f ms\n",   //
+                                  "  to_part: %f ms\n"};  //
+
+  for (int i = 0; i < substeps; ++i) {
+    printf(labels[i], 1000.f * step_times[i] / cycles);
+  }
 
   printf("\n");
 
