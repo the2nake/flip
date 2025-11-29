@@ -10,9 +10,10 @@ const float k_gravity = 10 * SIM_H * CELL_H;
 
 const float k_relax = 1.9f;
 const float k_flip = 0.93f;
-const float k_stiffness = 1.f;
+const float k_stiffness = 1.1f;
 
-const int k_iters = 100;
+const int k_project_iters = 100;
+const int k_separate_iters = 2;
 
 state_e_t states[SIM_H][SIM_W];  // states
 float densities[SIM_H][SIM_W];   // densities
@@ -27,11 +28,20 @@ float v2_prior[V1N];
 particle_t *particles;
 vel_weight_t *vel_ws;
 int n_particles = PARTICLES_PER_CELL * SIM_W * SIM_H;
-hash_grid_t particle_grid;
+hash_grid_t hg;
 
 //=============
 //    DEBUG
 //=============
+
+void print_grid(int *arr, int w, int h, const char *name) {
+  printf("-- %s --\n", name);
+  for (int i = 0; i < h; ++i) {
+    for (int j = 0; j < w; ++j) { printf("%d ", arr[w * i + j]); }
+    printf("\n");
+  }
+  printf("---\n");
+}
 
 void print_field(float *arr, int w, int h, const char *name) {
   printf("-- %s --\n", name);
@@ -69,6 +79,14 @@ float now() { return (float)clock() / CLOCKS_PER_SEC; }
 bool in_rangei(int val, int lo, int hi) { return lo <= val && val <= hi; }
 bool in_rangef(float val, float lo, float hi) { return lo <= val && val <= hi; }
 
+int imin(int a, int b) {
+  if (b < a) return b;
+  return a;
+}
+int imax(int a, int b) {
+  if (b > a) return b;
+  return a;
+}
 int iclamp(int val, const int lo, const int hi) {
   if (val > hi) { return hi; }
   if (val < lo) { return lo; }
@@ -99,8 +117,8 @@ bool particle_in_bounds(particle_t *p) {
 }
 
 void particle_enforce_bounds(particle_t *p) {
-  p->x1 = fclamp(p->x1, 0.f, SIM_W * CELL_W - 0.0001);
-  p->x2 = fclamp(p->x2, 0.f, SIM_H * CELL_H - 0.0001);
+  p->x1 = fclamp(p->x1, 0.001f, SIM_W * CELL_W - 0.001f);
+  p->x2 = fclamp(p->x2, 0.001f, SIM_H * CELL_H - 0.001f);
 }
 
 // index of top-left x vel

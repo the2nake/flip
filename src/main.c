@@ -1,4 +1,5 @@
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -15,6 +16,7 @@ void setup_scaling(SDL_Window *window, SDL_Renderer *renderer);
 void initialise();
 
 void advect();
+void separate();
 void compute_density();
 void v_to_grid();
 void project(int iters);
@@ -94,12 +96,14 @@ int main() {
 
     if (!paused) {
       // simulation code
-      float times[substeps] = {time_of(advect()),                    //
-                               time_of(compute_density()),           //
-                               time_of(hg_compute(&particle_grid)),  //
-                               time_of(v_to_grid()),                 //
-                               time_of(project(k_iters)),            //
-                               time_of(v_to_particles())};
+      float times[substeps] = {
+          time_of(advect()),                  //
+          time_of(separate()),                //
+          time_of(compute_density()),         //
+          time_of(v_to_grid()),               //
+          time_of(project(k_project_iters)),  //
+          time_of(v_to_particles()),          //
+      };
 
       for (int i = 0; i < substeps; ++i) { step_times[i] += times[i]; }
 
@@ -122,17 +126,19 @@ int main() {
 
   free(particles);
   free(vel_ws);
-  hg_free(&particle_grid);
+  hg_free(&hg);
 
   printf("\n -- finished -- \n\n");
   printf("time per cycle: %f ms\n", 1000.f * update_time / cycles);
 
-  const char *labels[substeps] = {"   advect: %f ms\n",   //
-                                  "  density: %f ms\n",   //
-                                  "  cons_hg: %f ms\n",   //
-                                  "  to_grid: %f ms\n",   //
-                                  "  project: %f ms\n",   //
-                                  "  to_part: %f ms\n"};  //
+  const char *labels[substeps] = {
+      "    advect: %f ms\n",  //
+      "  separate: %f ms\n",  //
+      "   density: %f ms\n",  //
+      "   to_grid: %f ms\n",  //
+      "   project: %f ms\n",  //
+      "   to_part: %f ms\n",  //
+  };
 
   for (int i = 0; i < substeps; ++i) {
     printf(labels[i], 1000.f * step_times[i] / cycles);
@@ -195,7 +201,7 @@ void distribute_particles() {
     vel_ws[i].w = 0.f;
   }
 
-  particle_grid = hg_init(SIM_W * SIM_H, n_particles);
+  hg = hg_init(PARTICLES_PER_CELL * SIM_W * SIM_H, n_particles);
 
   constexpr float x_gap = PARTICLE_SIZE;
   constexpr float y_gap = PARTICLE_SIZE;
@@ -247,9 +253,7 @@ void update_prior_velocities() {
   memcpy(v2_prior, v2, V2N * sizeof(float));
 }
 
-// TODO! fix viscosity
 void advect() {
-  // TODO? separate particles using LUT method, radix sorting
   // set all non-solid cells to air
   for (int i = 0; i < SIM_H; ++i) {
     for (int j = 0; j < SIM_W; ++j) {
@@ -295,6 +299,59 @@ void advect() {
 
     set_cell_at(&particles[i], water_e);
   }
+}
+
+void separate_pair(particle_t *a, particle_t *b);
+void separate_cell(particle_t *a, int hg_i);
+
+void separate() {
+  hg_compute(&hg);
+
+  for (int iters = 0; iters < k_separate_iters; ++iters) {
+    const int rows = PARTICLE_PACKING * SIM_H;
+    const int cols = PARTICLE_PACKING * SIM_W;
+    for (int n = PARTICLES_PER_CELL * SIM_W * SIM_H - 1; n >= 0; --n) {
+      for (int k = hg.lookup[n]; k < hg.lookup[n + 1]; ++k) {
+        int i = n / cols, j = n % cols;
+        int check_i0 = imax(0, i - 1);
+        int check_i1 = imin(rows - 1, i + 1);
+        int check_j0 = imax(0, j - 1);
+        int check_j1 = imin(cols - 1, j + 1);
+
+        particle_t *p = &particles[hg.indices[k]];
+        // loop through 3x3 box
+        for (int check_i = check_i0; check_i < check_i1; ++check_i) {
+          for (int check_j = check_j0; check_j < check_j1; ++check_j) {
+            separate_cell(p, cols * check_i + check_j);
+          }
+        }
+      }
+    }
+  }
+}
+
+void separate_cell(particle_t *p, int hg_i) {
+  int start = hg.lookup[hg_i];
+  int endat = hg.lookup[hg_i + 1];
+  for (int k = start; k < endat; ++k) {
+    separate_pair(p, &particles[hg.indices[k]]);
+  }
+}
+
+void separate_pair(particle_t *a, particle_t *b) {
+  if (a == b) return;
+
+  float dx = b->x1 - a->x1;
+  float dy = b->x2 - a->x2;
+  float dist = hypot(dx, dy);
+
+  if (dist == 0.f || 2 * dist >= PARTICLE_SIZE) return;
+  float new_dist = PARTICLE_SIZE;
+
+  b->x1 += dx;
+  b->x2 += dy;
+  a->x1 -= dx;
+  a->x2 -= dy;
 }
 
 void compute_density() {

@@ -12,11 +12,12 @@ constexpr int SIM_H = 60;
 constexpr int CELL_W = 2;
 constexpr int CELL_H = CELL_W;
 
-constexpr int PARTICLE_PACKING = 3;
-constexpr int PARTICLES_PER_CELL = 9;
+constexpr int PARTICLE_PACKING = 2;
+constexpr int PARTICLES_PER_CELL = 4;
 
 constexpr float PARTICLE_SIZE = (float)CELL_W / PARTICLE_PACKING;
-constexpr float DENSITY_0 = PARTICLES_PER_CELL;
+constexpr float HEX_VS_SQU = 1.1547f;  // 4 / SQRT(12)
+constexpr float DENSITY_0 = HEX_VS_SQU * PARTICLES_PER_CELL;
 
 constexpr float BACKTRACK_RANGE = 2.f;
 constexpr int BACKTRACK_ATTEMPTS = 10;
@@ -45,7 +46,8 @@ extern const float k_relax;
 extern const float k_flip;
 extern const float k_stiffness;
 
-extern const int k_iters;
+extern const int k_project_iters;
+extern const int k_separate_iters;
 
 typedef enum { solid_e = 0, water_e = 1, air_e = 2 } state_e_t;
 typedef enum { v1_e, v2_e } field_e_t;
@@ -83,19 +85,22 @@ typedef struct {
 extern particle_t *particles;
 extern vel_weight_t *vel_ws;
 extern int n_particles;
-extern hash_grid_t particle_grid;
+extern hash_grid_t hg;
 
 float now();
+void print_grid(int *arr, int w, int h, const char *name);
 void print_field(float *arr, int w, int h, const char *name);
 void print_v1();
 void print_v2();
 void print_w1();
 void print_w2();
-void inspect(particle_t* p);
+void inspect(particle_t *p);
 
 bool in_rangei(int val, int lo, int hi);
 bool in_rangef(float val, float lo, float hi);
 
+int imin(int a, int b);
+int imax(int a, int b);
 int iclamp(int val, const int lo, const int hi);
 float fclamp(float val, const float lo, const float hi);
 float lerp(float a, float b, float t);

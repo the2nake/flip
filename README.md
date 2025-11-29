@@ -9,6 +9,7 @@ Reimplements the algorithm explained by Matthias Müller in C, using SDL3 to ren
 * PIC-FLIP interpolation
 * particle and velocity visualisation
 * drift compensation based on density calculation
+* particle separation using a hash grid
 * all on CPU
 
 ## [building]

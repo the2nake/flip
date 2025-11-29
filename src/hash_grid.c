@@ -1,17 +1,19 @@
 #include "hash_grid.h"
 
 #include <assert.h>
-#include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #include "flip.h"
 
 hash_grid_t hg_init(int lookup_size, int item_count) {
-  return (hash_grid_t){.lookup = malloc(lookup_size * sizeof(int)),
-                       .indices = malloc(item_count * sizeof(int)),
-                       .n_lookup = lookup_size,
-                       .n_indices = item_count};
+  hash_grid_t hg = {.lookup = nullptr,
+                    .indices = nullptr,
+                    .n_lookup = lookup_size + 1,  //  `+1` for guard cell at end
+                    .n_indices = item_count};
+
+  hg.lookup = malloc(hg.n_lookup * sizeof(int));
+  hg.indices = malloc(hg.n_indices * sizeof(int));
+  return hg;
 }
 
 void hg_compute(hash_grid_t* hg) {
@@ -19,14 +21,13 @@ void hg_compute(hash_grid_t* hg) {
   for (int i = 0; i < hg->n_lookup; ++i) { hg->lookup[i] = 0; }
   for (int i = 0; i < hg->n_indices; ++i) { hg->indices[i] = -1; }
 
+  const int cols = PARTICLE_PACKING * SIM_W;
+
   // count particles in each cell
   for (int i = 0; i < hg->n_indices; ++i) {
-    int c_i = 0, c_j = 0;
-    get_particle_cell(&particles[i], &c_i, &c_j);
-    if (isnan(particles[i].v1) || isnan(particles[i].v2)) {
-      inspect(&particles[i]);
-    }
-    hg->lookup[c_i * SIM_W + c_j] += 1;
+    int c_j = PARTICLE_PACKING * particles[i].x1 / CELL_W;
+    int c_i = PARTICLE_PACKING * particles[i].x2 / CELL_H;
+    hg->lookup[c_i * cols + c_j] += 1;
   }
 
   // compute prefix sum
@@ -38,19 +39,14 @@ void hg_compute(hash_grid_t* hg) {
   }
 
   for (int i = 0; i < hg->n_indices; ++i) {
-    int c_i = 0, c_j = 0;
-    get_particle_cell(&particles[i], &c_i, &c_j);
+    int c_j = PARTICLE_PACKING * particles[i].x1 / CELL_W;
+    int c_i = PARTICLE_PACKING * particles[i].x2 / CELL_H;
 
-    int pos = hg->lookup[c_i * SIM_W + c_j];
-    const int fpos = pos;
+    int pos = hg->lookup[c_i * cols + c_j];
     assert(pos >= 0);  // otherwise the lookup was constructed incorrectly
 
     // look for an empty spot in `indices`
     while (pos < hg->n_indices && hg->indices[pos] != -1) { ++pos; }
-    if (pos >= hg->n_indices) {
-      printf("%d, %d, (%d, %d)\n", i, fpos, c_i, c_j);
-      printf("%f %f\n", particles[i].x1, particles[i].x2);
-    }
     assert(pos < hg->n_indices);
     hg->indices[pos] = i;
   }

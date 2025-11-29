@@ -4,3 +4,5 @@ IndentWidth: 2
 ---
 Language: Cpp
 AllowShortBlocksOnASingleLine: Always
+KeepEmptyLinesAtEOF: true
+InsertNewlineAtEOF: true
