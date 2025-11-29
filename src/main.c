@@ -145,7 +145,7 @@ int main() {
   }
   printf("\n");
 
-  printf("cells: %d\n", SIM_W * SIM_H);
+  printf("    cells: %d\n", SIM_W * SIM_H);
   printf("particles: %d\n", n_particles);
   printf("\n");
 
