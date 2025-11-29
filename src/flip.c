@@ -48,6 +48,18 @@ void print_v2() { print_field(v2, SIM_W, SIM_H + 1, "y vel"); }
 void print_w1() { print_field(w1, SIM_W + 1, SIM_H, "x weights"); }
 void print_w2() { print_field(w2, SIM_W, SIM_H + 1, "y weights"); }
 
+void inspect(particle_t *p) {
+  int i = p - particles;
+  printf("i=%d\n", i);
+  printf("  x=(%.3f %.3f), v=(%.3f %.3f)\n", p->x1, p->x2, p->v1, p->v2);
+  i *= 8;
+  printf("  vw_x.w=%.3f %.3f %.3f %.3f\n", vel_ws[i].w, vel_ws[i + 1].w,
+         vel_ws[i + 2].w, vel_ws[i + 3].w);
+  i += 4;
+  printf("  vw_y.w=%.3f %.3f %.3f %.3f\n", vel_ws[i].w, vel_ws[i + 1].w,
+         vel_ws[i + 2].w, vel_ws[i + 3].w);
+}
+
 //=============
 //    UTILS
 //=============

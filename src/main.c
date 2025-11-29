@@ -57,7 +57,7 @@ int main() {
   float update_time = 0.0;
   long long cycles = 0;
 
-  constexpr int substeps = 5;
+  constexpr int substeps = 6;
   float step_times[substeps];
   for (int i = 0; i < substeps; ++i) { step_times[i] = 0.f; }
 
@@ -94,10 +94,11 @@ int main() {
 
     if (!paused) {
       // simulation code
-      float times[substeps] = {time_of(advect()),           //
-                               time_of(compute_density()),  //
-                               time_of(v_to_grid()),        //
-                               time_of(project(k_iters)),   //
+      float times[substeps] = {time_of(advect()),                    //
+                               time_of(compute_density()),           //
+                               time_of(hg_compute(&particle_grid)),  //
+                               time_of(v_to_grid()),                 //
+                               time_of(project(k_iters)),            //
                                time_of(v_to_particles())};
 
       for (int i = 0; i < substeps; ++i) { step_times[i] += times[i]; }
@@ -121,13 +122,14 @@ int main() {
 
   free(particles);
   free(vel_ws);
-  hg_free(particle_grid);
+  hg_free(&particle_grid);
 
   printf("\n -- finished -- \n\n");
   printf("time per cycle: %f ms\n", 1000.f * update_time / cycles);
 
   const char *labels[substeps] = {"   advect: %f ms\n",   //
                                   "  density: %f ms\n",   //
+                                  "  cons_hg: %f ms\n",   //
                                   "  to_grid: %f ms\n",   //
                                   "  project: %f ms\n",   //
                                   "  to_part: %f ms\n"};  //
@@ -188,6 +190,10 @@ void distribute_particles() {
   n_particles = PARTICLES_PER_CELL * count_water_cells();
   particles = malloc(n_particles * sizeof(particle_t));
   vel_ws = malloc(n_particles * 8 * sizeof(vel_weight_t));
+  for (int i = 0; i < n_particles * 8; ++i) {
+    vel_ws[i].i = 0;
+    vel_ws[i].w = 0.f;
+  }
 
   particle_grid = hg_init(SIM_W * SIM_H, n_particles);
 
@@ -268,8 +274,9 @@ void advect() {
     bool in_cell = particle_in(p, solid_e);
     if (in_cell) {
       int c_i = 0, c_j = 0;
-      float nx1 = 0.f, nx2 = 0.f;
       get_particle_cell(p, &c_i, &c_j);
+
+      float nx1 = 0.f, nx2 = 0.f;
       get_cell_normal(c_i, c_j, &nx1, &nx2);
 
       for (int n = 0; n < BACKTRACK_ATTEMPTS && in_cell; ++n) {
@@ -285,6 +292,7 @@ void advect() {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "particle out of bounds");
       }
     }
+
     set_cell_at(&particles[i], water_e);
   }
 }
@@ -336,10 +344,10 @@ void v_to_grid() {
   }
 
   for (int i = 0; i < V1N; ++i) {
-    if (isfinite(v1[i]) && w1[i]) v1[i] /= w1[i];
+    if (w1[i]) v1[i] /= w1[i];
   }
   for (int i = 0; i < V2N; ++i) {
-    if (isfinite(v2[i]) && w2[i]) v2[i] /= w2[i];
+    if (w2[i]) v2[i] /= w2[i];
   }
 }
 
@@ -358,19 +366,20 @@ void compute_weights(particle_t *p, vel_weight_t *vel_w) {
   position_in_v2_grid(p, v2_row, v2_col, &v2_dx, &v2_dy);
 
   // clang-format off
-  vel_w[0] = (vel_weight_t){v1_i                  , v1_dx            * v1_dy           };
-  vel_w[1] = (vel_weight_t){v1_i + (SIM_W + 1)    , v1_dx            * (CELL_H - v1_dy)};
-  vel_w[2] = (vel_weight_t){v1_i               + 1, (CELL_W - v1_dx) * v1_dy           };
-  vel_w[3] = (vel_weight_t){v1_i + (SIM_W + 1) + 1, (CELL_W - v1_dx) * (CELL_H - v1_dy)};
+  vel_w[0] = (vel_weight_t){v1_i                  , (CELL_W - v1_dx) * (CELL_H - v1_dy)};
+  vel_w[1] = (vel_weight_t){v1_i + (SIM_W + 1)    , (CELL_W - v1_dx) *           v1_dy };
+  vel_w[2] = (vel_weight_t){v1_i               + 1,            v1_dx * (CELL_H - v1_dy)};
+  vel_w[3] = (vel_weight_t){v1_i + (SIM_W + 1) + 1,            v1_dx *           v1_dy };
 
-  vel_w[4] = (vel_weight_t){v2_i            ,           v2_dx  *           v2_dy };
-  vel_w[5] = (vel_weight_t){v2_i + SIM_W    ,           v2_dx  * (CELL_H - v2_dy)};
-  vel_w[6] = (vel_weight_t){v2_i         + 1, (CELL_W - v2_dx) *           v2_dy };
-  vel_w[7] = (vel_weight_t){v2_i + SIM_W + 1, (CELL_W - v2_dx) * (CELL_H - v2_dy)};
+  vel_w[4] = (vel_weight_t){v2_i            , (CELL_W - v2_dx) * (CELL_H - v2_dy)};
+  vel_w[5] = (vel_weight_t){v2_i + SIM_W    , (CELL_W - v2_dx) *           v2_dy };
+  vel_w[6] = (vel_weight_t){v2_i         + 1,           v2_dx  * (CELL_H - v2_dy)};
+  vel_w[7] = (vel_weight_t){v2_i + SIM_W + 1,           v2_dx  *           v2_dy };
   // clang-format on
 }
 
 void add_weight(field_e_t field, vel_weight_t *vel_w, float vel) {
+  // TODO? use lookup table to speed up add_weight is_water and touches_solid
   if (!in_rangei(vel_w->i, 0, field == v1_e ? V1N : V2N)) {
     vel_w->w = 0.f;
     return;
@@ -378,24 +387,24 @@ void add_weight(field_e_t field, vel_weight_t *vel_w, float vel) {
 
   float *vf = field == v1_e ? v1 : v2;
   float *wf = field == v1_e ? w1 : w2;
+
   int i = vel_w->i / (SIM_W + (field == v1_e));
   int j = vel_w->i % (SIM_W + (field == v1_e));
-
-  bool is_water, touches_solid;
+  bool touches_water, touches_solid;
 
   if (field == v1_e) {
-    is_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
+    touches_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
     touches_solid = cell_is(i, j - 1, solid_e) || cell_is(i, j, solid_e);
   } else {
-    is_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
+    touches_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
     touches_solid = cell_is(i - 1, j, solid_e) || cell_is(i, j, solid_e);
   }
 
-  if (is_water && !touches_solid) {
+  if (touches_water && !touches_solid) {
     vf[vel_w->i] += vel_w->w * vel;
     wf[vel_w->i] += vel_w->w;
   } else {
-    vf[vel_w->i] = touches_solid ? 0.f : NAN;
+    vf[vel_w->i] = 0.f;
     wf[vel_w->i] = 0.f;
     vel_w->w = 0.f;
   }
@@ -424,6 +433,11 @@ void project(int iters) {
         float *vr = &v1[v1_i + 1];
         float *vu = &v2[v2_i];
         float *vd = &v2[v2_i + SIM_W];
+
+        assert(!isnan(*vl));
+        assert(!isnan(*vr));
+        assert(!isnan(*vu));
+        assert(!isnan(*vd));
 
         float net = (*vr + *vd - *vl - *vu) -
                     k_stiffness * (densities[i][j] - PARTICLES_PER_CELL);
@@ -477,17 +491,19 @@ void update_particle(int i, field_e_t field, float flip) {
   float w = 0.f;
 
   for (int j = 0; j < 4; ++j, ++vel_w) {
-    if (vel_w->i < 0 || !vel_w->w || !isfinite(vf[vel_w->i])) continue;
+    if (vel_w->i < 0 || vel_w->w == 0.f || !isfinite(vf[vel_w->i])) continue;
 
     v_pic += vf[vel_w->i] * vel_w->w;
     v_flip += (vf[vel_w->i] - v_prior[vel_w->i]) * vel_w->w;
     w += vel_w->w;
   }
 
-  v_flip = v_flip / w + *v_out;
-  v_pic = v_pic / w;
+  if (w > 0.f) {
+    v_flip = v_flip / w + *v_out;
+    v_pic = v_pic / w;
 
-  *v_out = lerp(v_pic, v_flip, flip);
+    *v_out = lerp(v_pic, v_flip, flip);
+  }
 }
 
 // clang-format off

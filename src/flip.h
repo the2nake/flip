@@ -91,6 +91,7 @@ void print_v1();
 void print_v2();
 void print_w1();
 void print_w2();
+void inspect(particle_t* p);
 
 bool in_rangei(int val, int lo, int hi);
 bool in_rangef(float val, float lo, float hi);
