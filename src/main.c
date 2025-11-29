@@ -254,13 +254,6 @@ void update_prior_velocities() {
 }
 
 void advect() {
-  // set all non-solid cells to air
-  for (int i = 0; i < SIM_H; ++i) {
-    for (int j = 0; j < SIM_W; ++j) {
-      if (states[i][j] != solid_e) { states[i][j] = air_e; }
-    }
-  }
-
   // move particles and update cell states
   for (int i = 0; i < n_particles; ++i) {
     particle_t *p = &particles[i];
@@ -273,31 +266,6 @@ void advect() {
     p->x2 += dx2;
 
     particle_enforce_bounds(p);
-    // TODO? particles bounce off of walls with raycasting
-
-    bool in_cell = particle_in(p, solid_e);
-    if (in_cell) {
-      int c_i = 0, c_j = 0;
-      get_particle_cell(p, &c_i, &c_j);
-
-      float nx1 = 0.f, nx2 = 0.f;
-      get_cell_normal(c_i, c_j, &nx1, &nx2);
-
-      for (int n = 0; n < BACKTRACK_ATTEMPTS && in_cell; ++n) {
-        p->x1 += (BACKTRACK_RANGE / BACKTRACK_ATTEMPTS) * CELL_W * nx1;
-        p->x2 += (BACKTRACK_RANGE / BACKTRACK_ATTEMPTS) * CELL_H * nx2;
-        // particle_enforce_bounds(p);
-        in_cell = particle_in(p, solid_e);
-      }
-
-      if (in_cell) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "particle inside a solid");
-      } else if (!particle_in_bounds(p)) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "particle out of bounds");
-      }
-    }
-
-    set_cell_at(&particles[i], water_e);
   }
 }
 
@@ -305,12 +273,12 @@ void separate_pair(particle_t *a, particle_t *b);
 void separate_cell(particle_t *a, int hg_i);
 
 void separate() {
-  hg_compute(&hg);
-
   for (int iters = 0; iters < k_separate_iters; ++iters) {
+    hg_compute(&hg);
+
     const int rows = PARTICLE_PACKING * SIM_H;
     const int cols = PARTICLE_PACKING * SIM_W;
-    for (int n = PARTICLES_PER_CELL * SIM_W * SIM_H - 1; n >= 0; --n) {
+    for (int n = 0; n < hg.n_lookup - 1; ++n) {
       for (int k = hg.lookup[n]; k < hg.lookup[n + 1]; ++k) {
         int i = n / cols, j = n % cols;
         int check_i0 = imax(0, i - 1);
@@ -326,6 +294,37 @@ void separate() {
           }
         }
       }
+    }
+
+    // set all non-solid cells to air
+    for (int i = 0; i < SIM_H; ++i) {
+      for (int j = 0; j < SIM_W; ++j) {
+        if (states[i][j] != solid_e) { states[i][j] = air_e; }
+      }
+    }
+
+    for (int i = 0; i < n_particles; ++i) {
+      particle_t *p = &particles[i];
+      particle_enforce_bounds(p);
+
+      bool in_cell = particle_in(p, solid_e);
+      if (in_cell) {
+        int c_i = 0, c_j = 0;
+        get_particle_cell(p, &c_i, &c_j);
+
+        float nx1 = 0.f, nx2 = 0.f;
+        get_cell_normal(c_i, c_j, &nx1, &nx2);
+
+        for (int n = 0; n < BACKTRACK_ATTEMPTS && in_cell; ++n) {
+          p->x1 += (BACKTRACK_RANGE / BACKTRACK_ATTEMPTS) * CELL_W * nx1;
+          p->x2 += (BACKTRACK_RANGE / BACKTRACK_ATTEMPTS) * CELL_H * nx2;
+          in_cell = particle_in(p, solid_e);
+        }
+
+        if (in_cell) { SDL_LogWarn(0, "particle in solid"); }
+      }
+
+      set_cell_at(p, water_e);
     }
   }
 }
@@ -348,8 +347,8 @@ void separate_pair(particle_t *a, particle_t *b) {
   if (dist == 0.f || 2 * dist >= PARTICLE_SIZE) return;
   float new_dist = PARTICLE_SIZE;
 
-  b->x1 += dx;
-  b->x2 += dy;
+  //b->x1 += dx;
+  //b->x2 += dy;
   a->x1 -= dx;
   a->x2 -= dy;
 }

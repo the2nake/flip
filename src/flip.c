@@ -5,12 +5,12 @@
 #include <time.h>
 
 const float k_frametime = 1.0 / 60.0;
-const float k_timestep = 1.0 / 60.0;
-const float k_gravity = 10 * SIM_H * CELL_H;
+const float k_timestep = 1.0 / 20.0;
+const float k_gravity = 1 * SIM_H * CELL_H;
 
 const float k_relax = 1.9f;
 const float k_flip = 0.93f;
-const float k_stiffness = 1.1f;
+const float k_stiffness = 1.f;
 
 const int k_project_iters = 100;
 const int k_separate_iters = 2;
@@ -23,7 +23,7 @@ float v2[V2N];  // vertical velocity
 float w1[V1N];  // velocity field weights
 float w2[V2N];  // velocity field weights
 float v1_prior[V1N];
-float v2_prior[V1N];
+float v2_prior[V2N];
 
 particle_t *particles;
 vel_weight_t *vel_ws;

@@ -6,8 +6,8 @@
 //   PARAMETERS
 //==================
 
-constexpr int SIM_W = 60;
-constexpr int SIM_H = 60;
+constexpr int SIM_W = 141;
+constexpr int SIM_H = 101;
 
 constexpr int CELL_W = 2;
 constexpr int CELL_H = CELL_W;
@@ -16,15 +16,14 @@ constexpr int PARTICLE_PACKING = 2;
 constexpr int PARTICLES_PER_CELL = 4;
 
 constexpr float PARTICLE_SIZE = (float)CELL_W / PARTICLE_PACKING;
-constexpr float HEX_VS_SQU = 1.1547f;  // 4 / SQRT(12)
-constexpr float DENSITY_0 = HEX_VS_SQU * PARTICLES_PER_CELL;
+constexpr float DENSITY_0 = PARTICLES_PER_CELL;
 
 constexpr float BACKTRACK_RANGE = 2.f;
-constexpr int BACKTRACK_ATTEMPTS = 10;
+constexpr int BACKTRACK_ATTEMPTS = 5;
 
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;
-constexpr float WINDOW_SCALE = 6.0f;
+constexpr float WINDOW_SCALE = 4.0f;
 
 //==================
 //   MACROS
@@ -75,7 +74,7 @@ extern float v2[V2N];  // vertical velocity
 extern float w1[V1N];  // velocity field weights
 extern float w2[V2N];  // velocity field weights
 extern float v1_prior[V1N];
-extern float v2_prior[V1N];
+extern float v2_prior[V2N];
 
 typedef struct {
   int i;
