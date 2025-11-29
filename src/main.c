@@ -16,7 +16,7 @@ void setup_scaling(SDL_Window *window, SDL_Renderer *renderer);
 void initialise();
 
 void advect();
-void separate();
+void separate(int iters);
 void compute_density();
 void v_to_grid();
 void project(int iters);
@@ -97,12 +97,12 @@ int main() {
     if (!paused) {
       // simulation code
       float times[substeps] = {
-          time_of(advect()),                  //
-          time_of(separate()),                //
-          time_of(compute_density()),         //
-          time_of(v_to_grid()),               //
-          time_of(project(k_project_iters)),  //
-          time_of(v_to_particles()),          //
+          time_of(advect()),                    //
+          time_of(separate(k_separate_iters)),  //
+          time_of(compute_density()),           //
+          time_of(v_to_grid()),                 //
+          time_of(project(k_project_iters)),    //
+          time_of(v_to_particles()),            //
       };
 
       for (int i = 0; i < substeps; ++i) { step_times[i] += times[i]; }
@@ -272,8 +272,8 @@ void advect() {
 void separate_pair(particle_t *a, particle_t *b);
 void separate_cell(particle_t *a, int hg_i);
 
-void separate() {
-  for (int iters = 0; iters < k_separate_iters; ++iters) {
+void separate(int iters) {
+  for (int attempt = 0; attempt < iters; ++attempt) {
     hg_compute(&hg);
 
     const int rows = PARTICLE_PACKING * SIM_H;
@@ -347,8 +347,8 @@ void separate_pair(particle_t *a, particle_t *b) {
   if (dist == 0.f || 2 * dist >= PARTICLE_SIZE) return;
   float new_dist = PARTICLE_SIZE;
 
-  //b->x1 += dx;
-  //b->x2 += dy;
+  // b->x1 += dx;
+  // b->x2 += dy;
   a->x1 -= dx;
   a->x2 -= dy;
 }
