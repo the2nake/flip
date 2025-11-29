@@ -9,7 +9,7 @@
 constexpr int SIM_W = 141;
 constexpr int SIM_H = 101;
 
-constexpr int CELL_W = 2;
+constexpr int CELL_W = 1;
 constexpr int CELL_H = CELL_W;
 
 constexpr int PARTICLE_PACKING = 2;
@@ -23,7 +23,7 @@ constexpr int BACKTRACK_ATTEMPTS = 5;
 
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;
-constexpr float WINDOW_SCALE = 4.0f;
+constexpr float WINDOW_SCALE = 8.0f;
 
 //==================
 //   MACROS

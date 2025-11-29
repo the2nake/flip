@@ -143,7 +143,10 @@ int main() {
   for (int i = 0; i < substeps; ++i) {
     printf(labels[i], 1000.f * step_times[i] / cycles);
   }
+  printf("\n");
 
+  printf("cells: %d\n", SIM_W * SIM_H);
+  printf("particles: %d\n", n_particles);
   printf("\n");
 
   return 0;
@@ -181,7 +184,7 @@ void set_state_half_water_box() {
     for (int j = 0; j < SIM_W; ++j) {
       if (cell_on_edge(i, j)) {
         states[i][j] = solid_e;
-      } else if (j * 2 < SIM_W && i > SIM_H / 5) {
+      } else if (j * 5 < 3 * SIM_W && i > SIM_H / 5) {
         states[i][j] = water_e;
       } else {
         states[i][j] = air_e;
@@ -273,9 +276,9 @@ void separate_pair(particle_t *a, particle_t *b);
 void separate_cell(particle_t *a, int hg_i);
 
 void separate(int iters) {
-  for (int attempt = 0; attempt < iters; ++attempt) {
-    hg_compute(&hg);
+  hg_compute(&hg);
 
+  for (int attempt = 0; attempt < iters; ++attempt) {
     const int rows = PARTICLE_PACKING * SIM_H;
     const int cols = PARTICLE_PACKING * SIM_W;
     for (int n = 0; n < hg.n_lookup - 1; ++n) {
