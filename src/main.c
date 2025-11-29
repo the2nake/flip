@@ -1,10 +1,4 @@
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_events.h>
-#include <SDL3/SDL_keycode.h>
-#include <SDL3/SDL_main.h>
-#include <SDL3/SDL_oldnames.h>
-#include <SDL3/SDL_pixels.h>
-#include <SDL3/SDL_render.h>
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -56,7 +50,9 @@ int main() {
   float update_time = 0.0;
   long long cycles = 0;
 
-  float sum_t1 = 0.f, sum_t2 = 0.f, sum_t3 = 0.f, sum_t4 = 0.f;
+  constexpr int substeps = 4;
+  float step_times[substeps];
+  for (int i = 0; i < substeps; ++i) { step_times[i] = 0.f; }
 
   initialise();
 
@@ -91,11 +87,12 @@ int main() {
 
     if (!paused) {
       // simulation code
+      float times[substeps] = {time_of(advect()),           //
+                               time_of(v_to_grid()),        //
+                               time_of(project(k_iters)),   //
+                               time_of(v_to_particles())};
 
-      sum_t1 += time_of(advect());
-      sum_t2 += time_of(v_to_grid());
-      sum_t3 += time_of(project(k_iters));
-      sum_t4 += time_of(v_to_particles());
+      for (int i = 0; i < substeps; ++i) { step_times[i] += times[i]; }
 
       update_time += now() - t0;
       ++cycles;
@@ -115,14 +112,19 @@ int main() {
   }
 
   free(particles);
+  free(particles_w);
 
   printf("\n -- finished -- \n\n");
+  printf("time per cycle: %f ms\n", 1000.f * update_time / cycles);
 
-  printf("time per cycle: %f ms\n", 1000.0 * update_time / cycles);
-  printf("   advect: %f ms\n", 1000.0 * sum_t1 / cycles);
-  printf("  to_grid: %f ms\n", 1000.0 * sum_t2 / cycles);
-  printf("  project: %f ms\n", 1000.0 * sum_t3 / cycles);
-  printf("  to_part: %f ms\n", 1000.0 * sum_t4 / cycles);
+  const char *labels[substeps] = {"   advect: %f ms\n",   //
+                                  "  to_grid: %f ms\n",   //
+                                  "  project: %f ms\n",   //
+                                  "  to_part: %f ms\n"};  //
+
+  for (int i = 0; i < substeps; ++i) {
+    printf(labels[i], 1000.f * step_times[i] / cycles);
+  }
 
   printf("\n");
 
