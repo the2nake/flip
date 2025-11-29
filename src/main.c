@@ -115,6 +115,8 @@ int main() {
   }
 
   free(particles);
+  free(particles_w);
+  hg_free(particle_grid);
 
   printf("\n -- finished -- \n\n");
 
@@ -173,6 +175,8 @@ void distribute_particles() {
   n_particles = PARTICLES_PER_CELL * count_water_cells();
   particles = malloc(n_particles * sizeof(particle_t));
   particles_w = malloc(n_particles * 8 * sizeof(cell_weight_t));
+
+  particle_grid = hg_init(SIM_W * SIM_H, n_particles);
 
   constexpr float x_gap = (float)CELL_W / DENSITY;
   constexpr float y_gap = (float)CELL_H / DENSITY;

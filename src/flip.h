@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hash_grid.h"
+
 //==================
 //   PARAMETERS
 //==================
@@ -68,6 +70,7 @@ typedef struct {
 extern particle_t *particles;
 extern cell_weight_t *particles_w;
 extern int n_particles;
+extern hash_grid_t particle_grid;
 
 float now();
 void print_field(float *arr, int w, int h, const char *name);
