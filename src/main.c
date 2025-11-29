@@ -14,8 +14,8 @@ void setup_scaling(SDL_Window *window, SDL_Renderer *renderer);
 
 void initialise();
 
-void compute_density();
 void advect();
+void compute_density();
 void v_to_grid();
 void project(int iters);
 void v_to_particles();
@@ -238,35 +238,6 @@ void update_prior_velocities() {
   memcpy(v2_prior, v2, V2N * sizeof(float));
 }
 
-void compute_density() {
-  constexpr float cell_area = CELL_W * CELL_H;
-
-  for (int i = 0; i < SIM_H; ++i) {
-    for (int j = 0; j < SIM_W; ++j) {
-      densities[i][j] = states[i][j] == solid_e ? NAN : 0.f;
-    }
-  }
-
-  for (int i = 0; i < n_particles; ++i) {
-    int c_i = particles[i].x2 / CELL_H - 0.5;
-    int c_j = particles[i].x1 / CELL_W - 0.5;
-
-    if (c_i < 0 || c_j < 0 || c_i >= SIM_H - 1 || c_j >= SIM_W - 1) continue;
-
-    float c_x1 = (c_j + 0.5) * CELL_W;
-    float c_x2 = (c_i + 0.5) * CELL_H;
-    float dx1 = particles[i].x1 - c_x1;
-    float dx2 = particles[i].x2 - c_x2;
-
-    // clang-format off
-    densities[c_i][c_j]         += (CELL_W - dx1) * (CELL_H - dx2) / cell_area;
-    densities[c_i][c_j + 1]     +=           dx1  * (CELL_H - dx2) / cell_area;
-    densities[c_i + 1][c_j]     += (CELL_W - dx1) *           dx2  / cell_area;
-    densities[c_i + 1][c_j + 1] +=           dx1  *           dx2  / cell_area;
-    // clang-format on
-  }
-}
-
 // TODO! fix viscosity
 void advect() {
   // TODO? separate particles using LUT method, radix sorting
@@ -312,6 +283,35 @@ void advect() {
       }
     }
     set_cell_at(&particles[i], water_e);
+  }
+}
+
+void compute_density() {
+  constexpr float cell_area = CELL_W * CELL_H;
+
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W; ++j) {
+      densities[i][j] = states[i][j] == solid_e ? NAN : 0.f;
+    }
+  }
+
+  for (int i = 0; i < n_particles; ++i) {
+    int c_i = particles[i].x2 / CELL_H - 0.5;
+    int c_j = particles[i].x1 / CELL_W - 0.5;
+
+    if (c_i < 0 || c_j < 0 || c_i >= SIM_H - 1 || c_j >= SIM_W - 1) continue;
+
+    float c_x1 = (c_j + 0.5) * CELL_W;
+    float c_x2 = (c_i + 0.5) * CELL_H;
+    float dx1 = particles[i].x1 - c_x1;
+    float dx2 = particles[i].x2 - c_x2;
+
+    // clang-format off
+    densities[c_i][c_j]         += (CELL_W - dx1) * (CELL_H - dx2) / cell_area;
+    densities[c_i][c_j + 1]     +=           dx1  * (CELL_H - dx2) / cell_area;
+    densities[c_i + 1][c_j]     += (CELL_W - dx1) *           dx2  / cell_area;
+    densities[c_i + 1][c_j + 1] +=           dx1  *           dx2  / cell_area;
+    // clang-format on
   }
 }
 
