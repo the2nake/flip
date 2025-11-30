@@ -20,6 +20,7 @@ constexpr float DENSITY_0 = PARTICLES_PER_CELL;
 
 constexpr float BACKTRACK_RANGE = 2.f;
 constexpr int BACKTRACK_ATTEMPTS = 5;
+constexpr bool USE_COARSE_DENSITY = false;
 
 constexpr int WINDOW_W = SIM_W * CELL_W;
 constexpr int WINDOW_H = SIM_H * CELL_H;

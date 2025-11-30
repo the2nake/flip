@@ -308,9 +308,18 @@ void separate(int iters) {
 
     for (int i = 0; i < n_particles; ++i) {
       particle_t *p = &particles[i];
+      p->x1 = fclamp(p->x1, CELL_W * 1.001, (SIM_W - 1.001) * CELL_W);
+      p->x2 = fclamp(p->x2, CELL_H * 1.001, (SIM_H - 1.001) * CELL_H);
+
+      // iterative approach
+      /*
       particle_enforce_bounds(p);
 
       bool in_cell = particle_in(p, solid_e);
+      if (in_cell) {
+        p->x1 = fclamp(p->x1, CELL_W * 1.001, (SIM_W - 1.001) * CELL_W);
+        p->x2 = fclamp(p->x2, CELL_H * 1.001, (SIM_H - 1.001) * CELL_H);
+      }
       if (in_cell) {
         int c_i = 0, c_j = 0;
         get_particle_cell(p, &c_i, &c_j);
@@ -326,16 +335,14 @@ void separate(int iters) {
 
         if (in_cell) { SDL_LogWarn(0, "particle in solid"); }
       }
-
+      */
       set_cell_at(p, water_e);
     }
   }
 }
 
 void separate_cell(particle_t *p, int hg_i) {
-  int start = hg.lookup[hg_i];
-  int endat = hg.lookup[hg_i + 1];
-  for (int k = start; k < endat; ++k) {
+  for (int k = hg.lookup[hg_i]; k < hg.lookup[hg_i + 1]; ++k) {
     separate_pair(p, &particles[hg.indices[k]]);
   }
 }
@@ -347,11 +354,24 @@ void separate_pair(particle_t *a, particle_t *b) {
   float dy = b->x2 - a->x2;
   float dist = hypot(dx, dy);
 
-  if (dist == 0.f || 2 * dist >= PARTICLE_SIZE) return;
+  if (2 * dist >= PARTICLE_SIZE) return;
+  if (dist == 0.f) {
+    b->x1 += PARTICLE_SIZE;
+    a->x1 -= PARTICLE_SIZE;
+    return;
+  }
+
   float new_dist = PARTICLE_SIZE;
 
-  // b->x1 += dx;
-  // b->x2 += dy;
+  // repurpose as shifting variable
+  dx *= 0.5f;
+  dy *= 0.5f;
+
+  dx *= (new_dist - dist) / dist;
+  dy *= (new_dist - dist) / dist;
+
+  b->x1 += dx;
+  b->x2 += dy;
   a->x1 -= dx;
   a->x2 -= dy;
 }
@@ -366,10 +386,29 @@ void compute_density() {
   }
 
   for (int i = 0; i < n_particles; ++i) {
-    int c_i = particles[i].x2 / CELL_H;
-    int c_j = particles[i].x1 / CELL_W;
-    if (c_i < 0 || c_j < 0 || c_i >= SIM_H - 1 || c_j >= SIM_W - 1) continue;
-    ++densities[c_i][c_j];
+    if (USE_COARSE_DENSITY) {
+      int c_i = particles[i].x2 / CELL_H;
+      int c_j = particles[i].x1 / CELL_W;
+      if (c_i < 0 || c_j < 0 || c_i >= SIM_H || c_j >= SIM_W) continue;
+      ++densities[c_i][c_j];
+    } else {
+      int c_i = particles[i].x2 / CELL_H - 0.5;
+      int c_j = particles[i].x1 / CELL_W - 0.5;
+
+      if (c_i < 0 || c_j < 0 || c_i >= SIM_H - 1 || c_j >= SIM_W - 1) continue;
+
+      float c_x1 = (c_j + 0.5) * CELL_W;
+      float c_x2 = (c_i + 0.5) * CELL_H;
+      float dx1 = particles[i].x1 - c_x1;
+      float dx2 = particles[i].x2 - c_x2;
+
+      // clang-format off
+      densities[c_i][c_j]         += (CELL_W - dx1) * (CELL_H - dx2) / cell_area;
+      densities[c_i][c_j + 1]     +=           dx1  * (CELL_H - dx2) / cell_area;
+      densities[c_i + 1][c_j]     += (CELL_W - dx1) *           dx2  / cell_area;
+      densities[c_i + 1][c_j + 1] +=           dx1  *           dx2  / cell_area;
+      // clang-format on
+    }
   }
 }
 
@@ -380,7 +419,7 @@ void v_to_grid() {
   reset_velocity_field();
 
   for (int i = 0; i < n_particles; ++i) {
-    // somehow this looped list pairing thing is faster by 0.1 ms and
+    // somehow this looped list pairing thing is faster by 0.1 ms anpd
     // easier to read. vectorization? i don't even know
     compute_weights(&particles[i], &vel_ws[8 * i]);
 
@@ -396,6 +435,8 @@ void v_to_grid() {
   for (int i = 0; i < V2N; ++i) {
     if (w2[i]) v2[i] /= w2[i];
   }
+
+  update_prior_velocities();
 }
 
 void compute_weights(particle_t *p, vel_weight_t *vel_w) {
@@ -459,8 +500,6 @@ void add_weight(field_e_t field, vel_weight_t *vel_w, float vel) {
 
 // enforce inflow = outflow iteratively
 void project(int iters) {
-  update_prior_velocities();
-
   for (int n = 0; n < iters; ++n) {
     for (int i = 1; i < SIM_H - 1; ++i) {
       for (int j = 1; j < SIM_W - 1; ++j) {
@@ -486,10 +525,11 @@ void project(int iters) {
         assert(!isnan(*vu));
         assert(!isnan(*vd));
 
-        float net = (*vr + *vd - *vl - *vu) -
-                    k_stiffness * (densities[i][j] - PARTICLES_PER_CELL);
-        float flow = k_relax * net / s;
+        // higher net flow out will cause velocities to be adjusted inwards
+        float net = (*vr + *vd - *vl - *vu);
+        net -= k_stiffness * (densities[i][j] - DENSITY_0);
 
+        float flow = k_relax * net / s;
         *vl += sl * flow;
         *vr -= sr * flow;
         *vu += su * flow;
@@ -515,6 +555,7 @@ void project(int iters) {
 
 void update_particle(int i, field_e_t field, float pic);
 
+// FIXME: 2.7 -> 6.0 somehow
 void v_to_particles() {
   for (int i = 0; i < n_particles; ++i) {
     update_particle(i, v1_e, k_flip);
@@ -546,12 +587,16 @@ void update_particle(int i, field_e_t field, float flip) {
   }
 
   if (w > 0.f) {
-    v_flip = v_flip / w + *v_out;
+    v_flip = *v_out + v_flip / w;
     v_pic = v_pic / w;
 
     *v_out = lerp(v_pic, v_flip, flip);
   }
 }
+
+//=============
+//  RENDERING
+//=============
 
 // clang-format off
 const SDL_Color c_wall  = {155, 155, 155, SDL_ALPHA_OPAQUE};

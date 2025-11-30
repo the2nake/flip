@@ -5,11 +5,11 @@
 #include <time.h>
 
 const float k_frametime = 1.0 / 60.0;
-const float k_timestep = 1.0 / 20.0;
-const float k_gravity = 1 * SIM_H * CELL_H;
+const float k_timestep = 1.0 / 60.0;
+const float k_gravity = 10 * SIM_H * CELL_H;
 
 const float k_relax = 1.9f;
-const float k_flip = 0.9f;
+const float k_flip = 0.95f;
 const float k_stiffness = 1.f;
 
 const int k_project_iters = 50;
