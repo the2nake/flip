@@ -400,22 +400,23 @@ void compute_density() {
       if (c_i < 0 || c_j < 0 || c_i >= SIM_H || c_j >= SIM_W) continue;
       ++densities[c_i][c_j];
     } else {
-      int c_i = particles[i].x2 / CELL_H - 0.5;
-      int c_j = particles[i].x1 / CELL_W - 0.5;
+      // find indices for the 2x2 cells containing the particle
+      int i0 = particles[i].x2 / CELL_H - 0.5;
+      int j0 = particles[i].x1 / CELL_W - 0.5;
+      int i1 = imin(i0 + 1, SIM_H - 1);
+      int j1 = imin(j0 + 1, SIM_W - 1);
 
-      if (c_i < 0 || c_j < 0 || c_i >= SIM_H - 1 || c_j >= SIM_W - 1) continue;
+      // interpolation factor for the area closer to the bottom-right
+      float f1_x1 = particles[i].x1 / CELL_W - (j0 + 0.5);
+      float f1_x2 = particles[i].x2 / CELL_H - (i0 + 0.5);
+      // for area closer to the top-left
+      float f0_x1 = 1.f - f1_x1;
+      float f0_x2 = 1.f - f1_x2;
 
-      float c_x1 = (c_j + 0.5) * CELL_W;
-      float c_x2 = (c_i + 0.5) * CELL_H;
-      float dx1 = particles[i].x1 - c_x1;
-      float dx2 = particles[i].x2 - c_x2;
-
-      // clang-format off
-      densities[c_i][c_j]         += (CELL_W - dx1) * (CELL_H - dx2) / cell_area;
-      densities[c_i][c_j + 1]     +=           dx1  * (CELL_H - dx2) / cell_area;
-      densities[c_i + 1][c_j]     += (CELL_W - dx1) *           dx2  / cell_area;
-      densities[c_i + 1][c_j + 1] +=           dx1  *           dx2  / cell_area;
-      // clang-format on
+      densities[i0][j0] += f0_x2 * f0_x1;
+      densities[i0][j1] += f0_x2 * f1_x1;
+      densities[i1][j0] += f1_x2 * f0_x1;
+      densities[i1][j1] += f1_x2 * f1_x1;
     }
   }
 }
