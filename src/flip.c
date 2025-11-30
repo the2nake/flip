@@ -183,19 +183,14 @@ void get_cell_normal(int i, int j, float *v1, float *v2) {
 }
 
 void set_cell_at(particle_t *particle, state_e_t state) {
-  int i = 0, j = 0;
-  get_particle_cell(particle, &i, &j);
+  int i = particle->x2 / CELL_H;
+  int j = particle->x1 / CELL_W;
   if (cell_in_bounds(i, j)) { states[i][j] = state; }
 }
 
-void get_particle_cell(particle_t *particle, int *i, int *j) {
-  *j = particle->x1 / CELL_W;
-  *i = particle->x2 / CELL_H;
-}
-
 bool particle_in(particle_t *particle, state_e_t state) {
-  int i = 0, j = 0;
-  get_particle_cell(particle, &i, &j);
+  int i = particle->x2 / CELL_H;
+  int j = particle->x1 / CELL_W;
   return cell_is(i, j, state);  // check bounds to not lose particles
 }
 

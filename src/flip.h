@@ -124,6 +124,5 @@ bool cell_is(int i, int j, state_e_t state);
 void get_cell_normal(int i, int j, float *v1, float *v2);
 void set_cell_at(particle_t *particle, state_e_t state);
 
-void get_particle_cell(particle_t *particle, int *i, int *j);
 bool particle_in(particle_t *particle, state_e_t state);
 float particle_velocity(particle_t *p);

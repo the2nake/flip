@@ -299,13 +299,6 @@ void separate(int iters) {
       }
     }
 
-    // set all non-solid cells to air
-    for (int i = 0; i < SIM_H; ++i) {
-      for (int j = 0; j < SIM_W; ++j) {
-        if (states[i][j] != solid_e) { states[i][j] = air_e; }
-      }
-    }
-
     for (int i = 0; i < n_particles; ++i) {
       particle_t *p = &particles[i];
       float new_x1 = fclamp(p->x1, CELL_W * 1.001, (SIM_W - 1.001) * CELL_W);
@@ -344,7 +337,6 @@ void separate(int iters) {
         if (in_cell) { SDL_LogWarn(0, "particle in solid"); }
       }
       */
-      set_cell_at(p, water_e);
     }
   }
 }
@@ -413,12 +405,44 @@ void compute_density() {
       float f0_x1 = 1.f - f1_x1;
       float f0_x2 = 1.f - f1_x2;
 
-      densities[i0][j0] += f0_x2 * f0_x1;
-      densities[i0][j1] += f0_x2 * f1_x1;
-      densities[i1][j0] += f1_x2 * f0_x1;
-      densities[i1][j1] += f1_x2 * f1_x1;
+      float d00 = f0_x2 * f0_x1;
+      float d01 = f0_x2 * f1_x1;
+      float d10 = f1_x2 * f0_x1;
+      float d11 = f1_x2 * f1_x1;
+
+      // redistribute density if hits a solid
+      // the ones that are solid have density nan already
+      float sum_density = 0.f;
+      sum_density += isnan(densities[i0][j0]) ? 0.f : d00;
+      sum_density += isnan(densities[i0][j1]) ? 0.f : d01;
+      sum_density += isnan(densities[i1][j0]) ? 0.f : d10;
+      sum_density += isnan(densities[i1][j1]) ? 0.f : d11;
+
+      if (sum_density > 0) {
+        d00 /= sum_density;
+        d01 /= sum_density;
+        d10 /= sum_density;
+        d11 /= sum_density;
+      }
+
+      densities[i0][j0] += d00;
+      densities[i0][j1] += d01;
+      densities[i1][j0] += d10;
+      densities[i1][j1] += d11;
     }
   }
+
+  // int fluid_cells = 0;
+  // float sum_density = 0.f;
+  // for (int i = 0; i < SIM_H; ++i) {
+  //   for (int j = 0; j < SIM_W; ++j) {
+  //     if (states[i][j] == water_e) {
+  //       ++fluid_cells;
+  //       sum_density += densities[i][j];
+  //     }
+  //   }
+  // }
+  // printf("%f\n", sum_density / fluid_cells);
 }
 
 void compute_weights(particle_t *p, vel_weight_t *vel_w);
@@ -426,6 +450,19 @@ void add_weight(field_e_t field, vel_weight_t *vel_w, float vel);
 
 void v_to_grid() {
   reset_velocity_field();
+
+  // set all non-solid cells to air
+  for (int i = 0; i < SIM_H; ++i) {
+    for (int j = 0; j < SIM_W; ++j) {
+      if (states[i][j] != solid_e) { states[i][j] = air_e; }
+    }
+  }
+
+  for (int i = 0; i < n_particles; ++i) {
+    int c_i = particles[i].x2 / CELL_H;
+    int c_j = particles[i].x1 / CELL_W;
+    if (states[c_i][c_j] == air_e) states[c_i][c_j] = water_e;
+  }
 
   for (int i = 0; i < n_particles; ++i) {
     // somehow this looped list pairing thing is faster by 0.1 ms anpd
