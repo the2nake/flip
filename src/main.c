@@ -366,8 +366,10 @@ void compute_density() {
   }
 
   for (int i = 0; i < n_particles; ++i) {
-    ++densities[(int)(particles[i].x2 / CELL_H)]
-               [(int)(particles[i].x1 / CELL_W)];
+    int c_i = particles[i].x2 / CELL_H;
+    int c_j = particles[i].x1 / CELL_W;
+    if (c_i < 0 || c_j < 0 || c_i >= SIM_H - 1 || c_j >= SIM_W - 1) continue;
+    ++densities[c_i][c_j];
   }
 }
 
