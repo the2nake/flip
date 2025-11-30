@@ -308,8 +308,16 @@ void separate(int iters) {
 
     for (int i = 0; i < n_particles; ++i) {
       particle_t *p = &particles[i];
-      p->x1 = fclamp(p->x1, CELL_W * 1.001, (SIM_W - 1.001) * CELL_W);
-      p->x2 = fclamp(p->x2, CELL_H * 1.001, (SIM_H - 1.001) * CELL_H);
+      float new_x1 = fclamp(p->x1, CELL_W * 1.001, (SIM_W - 1.001) * CELL_W);
+      float new_x2 = fclamp(p->x2, CELL_H * 1.001, (SIM_H - 1.001) * CELL_H);
+      if (new_x1 != p->x1) {
+        p->x1 = new_x1;
+        p->v1 = 0.f;
+      }
+      if (new_x2 != p->x2) {
+        p->x2 = new_x2;
+        p->v2 = 0.f;
+      }
 
       // iterative approach
       /*
