@@ -526,21 +526,17 @@ void add_weight(field_e_t field, vel_weight_t *vel_w, float vel) {
   int j = vel_w->i % (SIM_W + (field == v1_e));
   bool touches_water, touches_solid;
 
-  if (field == v1_e) {
-    touches_water = cell_is(i, j - 1, water_e) || cell_is(i, j, water_e);
-    touches_solid = cell_is(i, j - 1, solid_e) || cell_is(i, j, solid_e);
-  } else {
-    touches_water = cell_is(i - 1, j, water_e) || cell_is(i, j, water_e);
-    touches_solid = cell_is(i - 1, j, solid_e) || cell_is(i, j, solid_e);
-  }
+  int i_off = field == v1_e ? 0 : -1;
+  int j_off = field == v1_e ? -1 : 0;
+  bool is_air = cell_is(i + i_off, j + j_off, air_e) && cell_is(i, j, air_e);
 
-  if (touches_water && !touches_solid) {
+  if (is_air) {
+    vf[vel_w->i] = NAN;
+    wf[vel_w->i] = 0.f;
+    vel_w->w = 0.f;  // mark influence on particle as invalid
+  } else {
     vf[vel_w->i] += vel_w->w * vel;
     wf[vel_w->i] += vel_w->w;
-  } else {
-    vf[vel_w->i] = 0.f;
-    wf[vel_w->i] = 0.f;
-    vel_w->w = 0.f;
   }
 }
 
@@ -601,7 +597,6 @@ void project(int iters) {
 
 void update_particle(int i, field_e_t field, float pic);
 
-// FIXME: 2.7 -> 6.0 somehow
 void v_to_particles() {
   for (int i = 0; i < n_particles; ++i) {
     update_particle(i, v1_e, k_flip);
@@ -625,7 +620,7 @@ void update_particle(int i, field_e_t field, float flip) {
   float w = 0.f;
 
   for (int j = 0; j < 4; ++j, ++vel_w) {
-    if (vel_w->i < 0 || vel_w->w == 0.f || !isfinite(vf[vel_w->i])) continue;
+    if (vel_w->w == 0.f || isnan(vf[vel_w->i])) continue;
 
     v_pic += vf[vel_w->i] * vel_w->w;
     v_flip += (vf[vel_w->i] - v_prior[vel_w->i]) * vel_w->w;
