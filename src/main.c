@@ -393,42 +393,35 @@ void compute_density() {
       ++densities[c_i][c_j];
     } else {
       // find indices for the 2x2 cells containing the particle
-      int i0 = particles[i].x2 / CELL_H - 0.5;
-      int j0 = particles[i].x1 / CELL_W - 0.5;
+      int i0 = particles[i].x2 / CELL_H - 0.5f;
+      int j0 = particles[i].x1 / CELL_W - 0.5f;
       int i1 = imin(i0 + 1, SIM_H - 1);
       int j1 = imin(j0 + 1, SIM_W - 1);
 
       // interpolation factor for the area closer to the bottom-right
-      float f1_x1 = particles[i].x1 / CELL_W - (j0 + 0.5);
-      float f1_x2 = particles[i].x2 / CELL_H - (i0 + 0.5);
+      float f1_x1 = particles[i].x1 / CELL_W - (j0 + 0.5f);
+      float f1_x2 = particles[i].x2 / CELL_H - (i0 + 0.5f);
       // for area closer to the top-left
       float f0_x1 = 1.f - f1_x1;
       float f0_x2 = 1.f - f1_x2;
 
-      float d00 = f0_x2 * f0_x1;
-      float d01 = f0_x2 * f1_x1;
-      float d10 = f1_x2 * f0_x1;
-      float d11 = f1_x2 * f1_x1;
+      float *surrounding[4] = {&densities[i0][j0], &densities[i0][j1],
+                               &densities[i1][j0], &densities[i1][j1]};
+      float factors[4] = {f0_x2 * f0_x1, f0_x2 * f1_x1,  //
+                          f1_x2 * f0_x1, f1_x2 * f1_x1};
 
       // redistribute density if hits a solid
-      // the ones that are solid have density nan already
+      // the ones that are solid have density of `nan` already
       float sum_density = 0.f;
-      sum_density += isnan(densities[i0][j0]) ? 0.f : d00;
-      sum_density += isnan(densities[i0][j1]) ? 0.f : d01;
-      sum_density += isnan(densities[i1][j0]) ? 0.f : d10;
-      sum_density += isnan(densities[i1][j1]) ? 0.f : d11;
-
-      if (sum_density > 0) {
-        d00 /= sum_density;
-        d01 /= sum_density;
-        d10 /= sum_density;
-        d11 /= sum_density;
+      for (int k = 0; k < 4; ++k) {
+        sum_density += isnan(*surrounding[k]) ? 0.f : factors[k];
       }
 
-      densities[i0][j0] += d00;
-      densities[i0][j1] += d01;
-      densities[i1][j0] += d10;
-      densities[i1][j1] += d11;
+      if (sum_density > 0) {
+        for (int k = 0; k < 4; ++k) {
+          *surrounding[k] += factors[k] / sum_density;
+        }
+      }
     }
   }
 
