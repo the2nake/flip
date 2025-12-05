@@ -12,7 +12,7 @@ const float k_relax = 1.9f;
 const float k_flip = 0.95f;
 const float k_stiffness = 1.f;
 
-const int k_project_iters = 50;
+const int k_project_iters = 100;
 const int k_separate_iters = 2;
 
 state_e_t states[SIM_H][SIM_W];  // states

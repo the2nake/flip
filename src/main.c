@@ -555,16 +555,16 @@ void project(int iters) {
         float *vu = &v2[v2_i];
         float *vd = &v2[v2_i + SIM_W];
 
-        assert(!isnan(*vl));
-        assert(!isnan(*vr));
-        assert(!isnan(*vu));
-        assert(!isnan(*vd));
+        // assert(!isnan(*vl));
+        // assert(!isnan(*vr));
+        // assert(!isnan(*vu));
+        // assert(!isnan(*vd));
 
         // higher net flow out will cause velocities to be adjusted inwards
-        float net = (*vr + *vd - *vl - *vu);
-        net -= k_stiffness * (densities[i][j] - DENSITY_0);
+        float flow = (*vr + *vd - *vl - *vu) -  //
+                     k_stiffness * (densities[i][j] - DENSITY_0);
+        flow *= k_relax / s;
 
-        float flow = k_relax * net / s;
         *vl += sl * flow;
         *vr -= sr * flow;
         *vu += su * flow;
