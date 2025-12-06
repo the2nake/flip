@@ -242,12 +242,12 @@ int count_water_cells() {
 void reset_velocity_field() {
   for (int i = 0; i < V1N; ++i) {
     v1[i] = 0.f;
-    w1[i] = 1.f;
+    w1[i] = 0.f;
   }
 
   for (int i = 0; i < V2N; ++i) {
     v2[i] = 0.f;
-    w2[i] = 1.f;
+    w2[i] = 0.f;
   }
 }
 
@@ -469,10 +469,10 @@ void v_to_grid() {
   }
 
   for (int i = 0; i < V1N; ++i) {
-    if (w1[i]) v1[i] /= w1[i];
+    if (w1[i] > 0.f) v1[i] /= w1[i];
   }
   for (int i = 0; i < V2N; ++i) {
-    if (w2[i]) v2[i] /= w2[i];
+    if (w2[i] > 0.f) v2[i] /= w2[i];
   }
 
   update_prior_velocities();
