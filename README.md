@@ -6,11 +6,11 @@ Reimplements the algorithm explained by Matthias Müller in C, using SDL3 to ren
 
 ## [features]
 
-* PIC-FLIP interpolation
-* particle and velocity visualisation
-* drift compensation based on density calculation
-* particle separation using a hash grid
-* all on CPU
+- PIC-FLIP interpolation
+- particle and velocity visualisation
+- drift compensation based on density calculation
+- particle separation using a hash grid
+- all on CPU
 
 ## [building]
 
@@ -35,3 +35,8 @@ Run the program with command `./ffs` or potentially `./ffs.exe` on Windows.
   - package may be listed with `-devel` suffix
 - C23 compliant compiler
 - CMake
+
+## [credits]
+
+- ChatGPT spotted a weight calculation error (which really should've been obvious)
+- Ten Minute Physics
