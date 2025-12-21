@@ -96,13 +96,11 @@ void print_w1();
 void print_w2();
 void inspect(particle_t *p);
 
-bool in_rangei(int val, int lo, int hi);
-bool in_rangef(float val, float lo, float hi);
+#define inrange(v, lo, hi) (lo <= v && lo <= hi)
+#define min(a, b) a < b ? a : b
+#define max(a, b) a < b ? b : a
+#define clamp(v, lo, hi) v > hi ? hi : (v < lo ? lo : v)
 
-int imin(int a, int b);
-int imax(int a, int b);
-int iclamp(int val, const int lo, const int hi);
-float fclamp(float val, const float lo, const float hi);
 float lerp(float a, float b, float t);
 void normalise(float *v1, float *v2);
 

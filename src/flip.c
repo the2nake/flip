@@ -76,29 +76,6 @@ void inspect(particle_t *p) {
 
 float now() { return (float)clock() / CLOCKS_PER_SEC; }
 
-bool in_rangei(int val, int lo, int hi) { return lo <= val && val <= hi; }
-bool in_rangef(float val, float lo, float hi) { return lo <= val && val <= hi; }
-
-int imin(int a, int b) {
-  if (b < a) return b;
-  return a;
-}
-int imax(int a, int b) {
-  if (b > a) return b;
-  return a;
-}
-int iclamp(int val, const int lo, const int hi) {
-  if (val > hi) { return hi; }
-  if (val < lo) { return lo; }
-  return val;
-}
-
-float fclamp(float val, const float lo, const float hi) {
-  if (val > hi) { return hi; }
-  if (val < lo) { return lo; }
-  return val;
-}
-
 float lerp(float a, float b, float t) { return a + t * (b - a); }
 
 void normalise(float *v1, float *v2) {
@@ -117,8 +94,8 @@ bool particle_in_bounds(particle_t *p) {
 }
 
 void particle_enforce_bounds(particle_t *p) {
-  p->x1 = fclamp(p->x1, 0.001f, SIM_W * CELL_W - 0.001f);
-  p->x2 = fclamp(p->x2, 0.001f, SIM_H * CELL_H - 0.001f);
+  p->x1 = clamp(p->x1, 0.001f, SIM_W * CELL_W - 0.001f);
+  p->x2 = clamp(p->x2, 0.001f, SIM_H * CELL_H - 0.001f);
 }
 
 // index of top-left x vel

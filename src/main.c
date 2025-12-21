@@ -284,10 +284,10 @@ void separate(int iters) {
     for (int n = 0; n < hg.n_lookup - 1; ++n) {
       for (int k = hg.lookup[n]; k < hg.lookup[n + 1]; ++k) {
         int i = n / cols, j = n % cols;
-        int check_i0 = imax(0, i - 1);
-        int check_i1 = imin(rows - 1, i + 1);
-        int check_j0 = imax(0, j - 1);
-        int check_j1 = imin(cols - 1, j + 1);
+        int check_i0 = max(0, i - 1);
+        int check_i1 = min(rows - 1, i + 1);
+        int check_j0 = max(0, j - 1);
+        int check_j1 = min(cols - 1, j + 1);
 
         particle_t *p = &particles[hg.indices[k]];
         // loop through 3x3 box
@@ -301,8 +301,8 @@ void separate(int iters) {
 
     for (int i = 0; i < n_particles; ++i) {
       particle_t *p = &particles[i];
-      float new_x1 = fclamp(p->x1, CELL_W * 1.001, (SIM_W - 1.001) * CELL_W);
-      float new_x2 = fclamp(p->x2, CELL_H * 1.001, (SIM_H - 1.001) * CELL_H);
+      float new_x1 = clamp(p->x1, CELL_W * 1.001, (SIM_W - 1.001) * CELL_W);
+      float new_x2 = clamp(p->x2, CELL_H * 1.001, (SIM_H - 1.001) * CELL_H);
       if (new_x1 != p->x1) {
         p->x1 = new_x1;
         p->v1 = 0.f;
@@ -312,14 +312,14 @@ void separate(int iters) {
         p->v2 = 0.f;
       }
 
-      // iterative approach
+      // iterative approach to specify a normal
       /*
       particle_enforce_bounds(p);
 
       bool in_cell = particle_in(p, solid_e);
       if (in_cell) {
-        p->x1 = fclamp(p->x1, CELL_W * 1.001, (SIM_W - 1.001) * CELL_W);
-        p->x2 = fclamp(p->x2, CELL_H * 1.001, (SIM_H - 1.001) * CELL_H);
+        p->x1 = clamp(p->x1, CELL_W * 1.001, (SIM_W - 1.001) * CELL_W);
+        p->x2 = clamp(p->x2, CELL_H * 1.001, (SIM_H - 1.001) * CELL_H);
       }
       if (in_cell) {
         int c_i = 0, c_j = 0;
@@ -333,6 +333,8 @@ void separate(int iters) {
           p->x2 += (BACKTRACK_RANGE / BACKTRACK_ATTEMPTS) * CELL_H * nx2;
           in_cell = particle_in(p, solid_e);
         }
+
+        // will also need to remove normal component of p->v1,v2
 
         if (in_cell) { SDL_LogWarn(0, "particle in solid"); }
       }
@@ -395,8 +397,8 @@ void compute_density() {
       // find indices for the 2x2 cells containing the particle
       int i0 = particles[i].x2 / CELL_H - 0.5f;
       int j0 = particles[i].x1 / CELL_W - 0.5f;
-      int i1 = imin(i0 + 1, SIM_H - 1);
-      int j1 = imin(j0 + 1, SIM_W - 1);
+      int i1 = min(i0 + 1, SIM_H - 1);
+      int j1 = min(j0 + 1, SIM_W - 1);
 
       // interpolation factor for the area closer to the bottom-right
       float f1_x1 = particles[i].x1 / CELL_W - (j0 + 0.5f);
@@ -424,18 +426,6 @@ void compute_density() {
       }
     }
   }
-
-  // int fluid_cells = 0;
-  // float sum_density = 0.f;
-  // for (int i = 0; i < SIM_H; ++i) {
-  //   for (int j = 0; j < SIM_W; ++j) {
-  //     if (states[i][j] == water_e) {
-  //       ++fluid_cells;
-  //       sum_density += densities[i][j];
-  //     }
-  //   }
-  // }
-  // printf("%f\n", sum_density / fluid_cells);
 }
 
 void compute_weights(particle_t *p, vel_weight_t *vel_w);
@@ -458,8 +448,6 @@ void v_to_grid() {
   }
 
   for (int i = 0; i < n_particles; ++i) {
-    // somehow this looped list pairing thing is faster by 0.1 ms anpd
-    // easier to read. vectorization? i don't even know
     compute_weights(&particles[i], &vel_ws[8 * i]);
 
     for (int j = 0; j < 4; ++j) {
@@ -486,8 +474,6 @@ void compute_weights(particle_t *p, vel_weight_t *vel_w) {
   coordinates_from_index(v1_i, SIM_W + 1, &v1_row, &v1_col);
   coordinates_from_index(v2_i, SIM_W, &v2_row, &v2_col);
 
-  // x velocities: no change on x, staggered upwards by CELL_H / 2
-  // y velocities: no change on y, staggered left by CELL_W / 2
   float v1_dx, v1_dy, v2_dx, v2_dy;
   position_in_v1_grid(p, v1_row, v1_col, &v1_dx, &v1_dy);
   position_in_v2_grid(p, v2_row, v2_col, &v2_dx, &v2_dy);
@@ -507,7 +493,7 @@ void compute_weights(particle_t *p, vel_weight_t *vel_w) {
 
 void add_weight(field_e_t field, vel_weight_t *vel_w, float vel) {
   // TODO? use lookup table to speed up add_weight is_water and touches_solid
-  if (!in_rangei(vel_w->i, 0, field == v1_e ? V1N : V2N)) {
+  if (!inrange(vel_w->i, 0, field == v1_e ? V1N : V2N)) {
     vel_w->w = 0.f;
     return;
   }
@@ -517,7 +503,6 @@ void add_weight(field_e_t field, vel_weight_t *vel_w, float vel) {
 
   int i = vel_w->i / (SIM_W + (field == v1_e));
   int j = vel_w->i % (SIM_W + (field == v1_e));
-  bool touches_water, touches_solid;
 
   int i_off = field == v1_e ? 0 : -1;
   int j_off = field == v1_e ? -1 : 0;
@@ -554,11 +539,6 @@ void project(int iters) {
         float *vr = &v1[v1_i + 1];
         float *vu = &v2[v2_i];
         float *vd = &v2[v2_i + SIM_W];
-
-        // assert(!isnan(*vl));
-        // assert(!isnan(*vr));
-        // assert(!isnan(*vu));
-        // assert(!isnan(*vd));
 
         // higher net flow out will cause velocities to be adjusted inwards
         float flow = (*vr + *vd - *vl - *vu) -  //
@@ -652,7 +632,7 @@ void render_simulation(SDL_Renderer *renderer) {
 }
 
 int opacity(float density) {
-  return iclamp(2 * 255 * density / PARTICLES_PER_CELL, 0, 255);
+  return clamp(2 * 255 * density / PARTICLES_PER_CELL, 0, 255);
 }
 
 void render_cells(SDL_Renderer *renderer) {
