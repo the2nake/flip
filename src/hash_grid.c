@@ -27,7 +27,7 @@ void hg_compute(hash_grid_t* hg) {
   for (int i = 0; i < hg->n_indices; ++i) {
     int c_j = PARTICLE_PACKING * particles[i].x1 / CELL_W;
     int c_i = PARTICLE_PACKING * particles[i].x2 / CELL_H;
-    hg->lookup[c_i * cols + c_j] += 1;
+    ++hg->lookup[c_i * cols + c_j];
   }
 
   // compute prefix sum
@@ -53,6 +53,13 @@ void hg_compute(hash_grid_t* hg) {
 }
 
 void hg_free(hash_grid_t* hg) {
-  if (hg->lookup != nullptr) { free(hg->lookup); }
-  if (hg->indices != nullptr) { free(hg->indices); }
+  if (hg->lookup != nullptr) {
+    free(hg->lookup);
+    hg->lookup = nullptr;
+  }
+
+  if (hg->indices != nullptr) {
+    free(hg->indices);
+    hg->indices = nullptr;
+  }
 }
