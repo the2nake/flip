@@ -37,6 +37,12 @@ void set_color(SDL_Renderer *renderer, const SDL_Color *color) {
   SDL_SetRenderDrawColor(renderer, color->r, color->g, color->b, color->a);
 }
 
+// clang-format off
+const SDL_Color c_wall  = {155, 155, 155, SDL_ALPHA_OPAQUE};
+const SDL_Color c_fluid = {200, 220, 255, SDL_ALPHA_OPAQUE};
+const SDL_Color c_air   = {255, 254, 255, SDL_ALPHA_OPAQUE};
+// clang-format on
+
 int main() {
   printf("\n");
 
@@ -110,6 +116,9 @@ int main() {
       update_time += now() - t0;
       ++cycles;
     }
+
+    set_color(renderer, &c_air);
+    SDL_RenderClear(renderer);
 
     render_simulation(renderer);
 
@@ -612,20 +621,11 @@ void update_particle(int i, field_e_t field, float flip) {
 //  RENDERING
 //=============
 
-// clang-format off
-const SDL_Color c_wall  = {155, 155, 155, SDL_ALPHA_OPAQUE};
-const SDL_Color c_fluid = {200, 220, 255, SDL_ALPHA_OPAQUE};
-const SDL_Color c_air   = {255, 254, 255, SDL_ALPHA_OPAQUE};
-// clang-format on
-
 void render_cells(SDL_Renderer *renderer);
 void render_particles(SDL_Renderer *renderer);
 void render_velocities(SDL_Renderer *renderer);
 
 void render_simulation(SDL_Renderer *renderer) {
-  set_color(renderer, &c_air);
-  SDL_RenderClear(renderer);
-
   render_cells(renderer);
   if (show_particles) { render_particles(renderer); }
   if (show_velocities) { render_velocities(renderer); }
