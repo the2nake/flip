@@ -15,7 +15,7 @@ Reimplements the algorithm explained by Matthias Müller in C, using SDL3 to ren
 ## [building]
 
 ```bash
-cmake -H . -B build
+cmake . -B build
 cmake --build build
 ```
 
